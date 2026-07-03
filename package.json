@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "build": "mkdir -p public && cp index.html style.css script.js public/",
     "dev": "node server.mjs",
     "check": "node --check script.js && node --check server.mjs && node --check api/bilibili.js && node --check api/videos.js"
   }
