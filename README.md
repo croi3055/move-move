@@ -1,0 +1,106 @@
+# 运动跟练视频库
+
+一个私人运动视频画廊。支持批量粘贴视频链接、B 站标题/封面解析、当前页面播放、编辑标题和分类，并可通过 Supabase 在电脑和 iPad 间同步。
+
+## 本地预览
+
+```bash
+npm run dev
+```
+
+打开：
+
+```txt
+http://127.0.0.1:4173/
+```
+
+如果还没配置 Supabase，页面会使用浏览器本地缓存。
+
+## Supabase 设置
+
+1. 在 Supabase 创建项目。
+2. 打开项目里的 `SQL Editor`。
+3. 运行：
+
+```sql
+-- 复制 supabase/schema.sql 的内容运行
+```
+
+4. 到 `Project Settings` -> `API Keys` 复制：
+   - `SUPABASE_URL`
+   - `SUPABASE_SERVICE_ROLE_KEY`
+
+## 本地环境变量
+
+复制 `.env.example` 为 `.env`，填入：
+
+```txt
+SUPABASE_URL=https://your-project-ref.supabase.co
+SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
+APP_WRITE_TOKEN=choose-a-private-password
+```
+
+当前 `server.mjs` 直接读取环境变量。可以这样启动：
+
+```bash
+SUPABASE_URL="..." SUPABASE_SERVICE_ROLE_KEY="..." APP_WRITE_TOKEN="..." npm run dev
+```
+
+## GitHub
+
+1. 在 GitHub 新建一个空仓库。
+2. 在本地项目目录运行：
+
+```bash
+git add .
+git commit -m "Initial workout video library"
+git branch -M main
+git remote add origin https://github.com/YOUR_NAME/YOUR_REPO.git
+git push -u origin main
+```
+
+## Vercel 部署
+
+1. 打开 Vercel。
+2. `Add New Project`。
+3. 选择刚才的 GitHub 仓库。
+4. Framework Preset 选择默认或 Other。
+5. Build Command 留空。
+6. Output Directory 留空。
+7. 在 `Settings` -> `Environment Variables` 添加：
+
+```txt
+SUPABASE_URL
+SUPABASE_SERVICE_ROLE_KEY
+APP_WRITE_TOKEN
+```
+
+8. 重新部署。
+
+## 绑定域名
+
+1. 进入 Vercel 项目。
+2. 打开 `Settings` -> `Domains`。
+3. 添加你的域名，例如：
+
+```txt
+workout.yourdomain.com
+```
+
+4. 按 Vercel 提示去域名 DNS 后台添加记录。
+
+常见子域名记录：
+
+```txt
+Type: CNAME
+Name: workout
+Value: cname.vercel-dns.com
+```
+
+根域名以 Vercel 页面显示为准。
+
+## 使用
+
+- 电脑和 iPad 打开同一个部署域名，会读取同一份 Supabase 视频列表。
+- 如果设置了 `APP_WRITE_TOKEN`，第一次添加、编辑、删除时页面会提示输入写入密钥。
+- 只观看不需要写入密钥。

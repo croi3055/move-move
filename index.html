@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>运动跟练视频库</title>
+    <link rel="stylesheet" href="./style.css?v=9" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <header class="topbar">
+        <div class="brand-mark">Workout</div>
+        <div class="top-actions">
+          <button class="primary-button add-video-button" type="button" id="openAddButton">
+            <span aria-hidden="true">＋</span>
+            添加视频
+          </button>
+        </div>
+      </header>
+
+      <section class="library-panel" aria-labelledby="libraryTitle">
+        <div class="toolbar">
+          <div>
+            <h2 id="libraryTitle">视频画廊</h2>
+          </div>
+          <div class="controls">
+            <label class="search-box">
+              <span aria-hidden="true">⌕</span>
+              <input id="searchInput" type="search" placeholder="搜索标题或分类" />
+            </label>
+            <select id="categoryFilter" aria-label="按分类筛选">
+              <option value="all">全部分类</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="video-grid" id="videoGrid"></div>
+        <p class="empty-state" id="emptyState">还没有视频</p>
+      </section>
+
+      <footer class="page-footer">
+        <span id="videoCount">0 个视频</span>
+        <span>右上角添加视频，保存后会出现在画廊。</span>
+      </footer>
+    </main>
+
+    <div class="modal-backdrop" id="addModal" hidden>
+      <section class="modal-panel add-modal" role="dialog" aria-modal="true" aria-labelledby="addVideoTitle">
+        <div class="modal-header">
+          <div>
+            <p class="eyebrow">Add Video</p>
+            <h2 id="addVideoTitle">添加到训练库</h2>
+          </div>
+          <button class="ghost-button" type="button" id="closeAddButton" title="关闭" aria-label="关闭添加窗口">×</button>
+        </div>
+
+        <form id="videoForm" class="video-form">
+          <label class="input-group">
+            <span>视频链接</span>
+            <textarea id="urlsInput" placeholder="每行一个链接，可以一次贴很多个" autocomplete="off" required></textarea>
+          </label>
+
+          <label class="input-group">
+            <span>分类</span>
+            <input id="categoryInput" type="text" list="categoryOptions" placeholder="例如：力量、拉伸、瑜伽" />
+            <datalist id="categoryOptions"></datalist>
+          </label>
+
+          <div class="modal-actions">
+            <p class="status-line" id="statusLine" role="status"></p>
+            <button class="primary-button" type="submit">
+              <span aria-hidden="true">＋</span>
+              保存
+            </button>
+          </div>
+        </form>
+      </section>
+    </div>
+
+    <div class="modal-backdrop player-backdrop" id="playerModal" hidden>
+      <section class="modal-panel player-modal" role="dialog" aria-modal="true" aria-labelledby="playerTitle">
+        <div class="modal-header">
+          <div>
+            <p class="eyebrow" id="playerSource">准备播放</p>
+            <h2 id="playerTitle">选择一个视频</h2>
+          </div>
+          <button class="ghost-button" type="button" id="closePlayerButton" title="关闭" aria-label="关闭播放器">×</button>
+        </div>
+        <div class="player-frame" id="playerFrame"></div>
+      </section>
+    </div>
+
+    <div class="modal-backdrop" id="editModal" hidden>
+      <section class="modal-panel edit-modal" role="dialog" aria-modal="true" aria-labelledby="editVideoTitle">
+        <div class="modal-header">
+          <div>
+            <p class="eyebrow">Edit Video</p>
+            <h2 id="editVideoTitle">修改视频信息</h2>
+          </div>
+          <button class="ghost-button" type="button" id="closeEditButton" title="关闭" aria-label="关闭编辑窗口">×</button>
+        </div>
+
+        <form id="editForm" class="video-form">
+          <label class="input-group">
+            <span>标题</span>
+            <input id="editTitleInput" type="text" required />
+          </label>
+
+          <label class="input-group">
+            <span>分类</span>
+            <input id="editCategoryInput" type="text" list="categoryOptions" placeholder="例如：力量、拉伸、瑜伽" />
+          </label>
+
+          <div class="modal-actions">
+            <p class="status-line" id="editStatusLine" role="status"></p>
+            <button class="primary-button" type="submit">保存修改</button>
+          </div>
+        </form>
+      </section>
+    </div>
+
+    <template id="videoCardTemplate">
+      <article class="video-card" tabindex="0">
+        <div class="thumbnail-button">
+          <img alt="" loading="lazy" />
+          <span class="play-mark" aria-hidden="true">▶</span>
+        </div>
+        <div class="card-body">
+          <div>
+            <p class="source-label"></p>
+            <h3></h3>
+          </div>
+          <div class="card-actions">
+            <span class="category-pill"></span>
+            <button class="icon-button edit-button" type="button" title="编辑视频" aria-label="编辑视频">✎</button>
+            <button class="icon-button delete-button" type="button" title="删除视频" aria-label="删除视频">×</button>
+          </div>
+        </div>
+      </article>
+    </template>
+
+    <script src="./script.js?v=9"></script>
+  </body>
+</html>
