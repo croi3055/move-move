@@ -4,6 +4,7 @@ import { extname, join, normalize } from "node:path";
 
 const root = process.cwd();
 const port = Number(process.env.PORT || 4173);
+const DEFAULT_LIBRARY_KEY = "default";
 
 const mimeTypes = {
   ".css": "text/css; charset=utf-8",
@@ -161,14 +162,16 @@ async function handleVideosApi(request, url, response) {
     return;
   }
 
+  const libraryKey = getLibraryKey(request, url);
+
   if (request.method === "GET") {
-    const data = await supabaseRequest("videos?select=*&order=created_at.desc");
+    const data = await supabaseRequest(`videos?library_key=eq.${encodeURIComponent(libraryKey)}&select=*&order=created_at.desc`);
     sendJson(response, 200, data.map(fromRow));
     return;
   }
 
   if (request.method === "POST") {
-    if (!isAuthorized(request)) {
+    if (!isAuthorized(request, libraryKey)) {
       sendJson(response, 401, { error: "Unauthorized" });
       return;
     }
@@ -181,19 +184,19 @@ async function handleVideosApi(request, url, response) {
       return;
     }
 
-    const data = await supabaseRequest("videos?on_conflict=url", {
+    const data = await supabaseRequest("videos?on_conflict=library_key,url", {
       method: "POST",
       headers: {
         Prefer: "resolution=merge-duplicates,return=representation",
       },
-      body: JSON.stringify(videos.map(toRow)),
+      body: JSON.stringify(videos.map((video) => toRow(video, libraryKey))),
     });
     sendJson(response, 200, data.map(fromRow));
     return;
   }
 
   if (request.method === "DELETE") {
-    if (!isAuthorized(request)) {
+    if (!isAuthorized(request, libraryKey)) {
       sendJson(response, 401, { error: "Unauthorized" });
       return;
     }
@@ -204,7 +207,7 @@ async function handleVideosApi(request, url, response) {
       return;
     }
 
-    await supabaseRequest(`videos?id=eq.${encodeURIComponent(id)}`, {
+    await supabaseRequest(`videos?id=eq.${encodeURIComponent(id)}&library_key=eq.${encodeURIComponent(libraryKey)}`, {
       method: "DELETE",
       headers: {
         Prefer: "return=minimal",
@@ -216,7 +219,7 @@ async function handleVideosApi(request, url, response) {
   }
 
   if (request.method === "PATCH") {
-    if (!isAuthorized(request)) {
+    if (!isAuthorized(request, libraryKey)) {
       sendJson(response, 401, { error: "Unauthorized" });
       return;
     }
@@ -237,7 +240,7 @@ async function handleVideosApi(request, url, response) {
       return;
     }
 
-    const data = await supabaseRequest(`videos?id=eq.${encodeURIComponent(id)}`, {
+    const data = await supabaseRequest(`videos?id=eq.${encodeURIComponent(id)}&library_key=eq.${encodeURIComponent(libraryKey)}`, {
       method: "PATCH",
       headers: {
         Prefer: "return=representation",
@@ -272,10 +275,11 @@ async function supabaseRequest(path, options = {}) {
   return upstream.json();
 }
 
-function isAuthorized(request) {
+function isAuthorized(request, libraryKey) {
   const token = process.env.APP_WRITE_TOKEN;
   if (!token) return true;
-  return request.headers["x-app-token"] === token;
+  if (request.headers["x-app-token"] === token) return true;
+  return libraryKey !== DEFAULT_LIBRARY_KEY && normalizeLibraryKey(request.headers["x-library-key"]) === libraryKey;
 }
 
 function readJsonBody(request) {
@@ -300,9 +304,10 @@ function sendJson(response, statusCode, payload) {
   response.end(JSON.stringify(payload));
 }
 
-function toRow(video) {
+function toRow(video, libraryKey) {
   return {
     id: video.id,
+    library_key: libraryKey,
     url: video.url,
     title: video.title,
     category: video.category || "未分类",
@@ -317,6 +322,7 @@ function toRow(video) {
 function fromRow(row) {
   return {
     id: row.id,
+    libraryKey: row.library_key || DEFAULT_LIBRARY_KEY,
     url: row.url,
     title: row.title,
     category: row.category,
@@ -326,4 +332,15 @@ function fromRow(row) {
     kind: row.kind,
     createdAt: new Date(row.created_at).getTime(),
   };
+}
+
+function getLibraryKey(request, url) {
+  return normalizeLibraryKey(url.searchParams.get("library") || request.headers["x-library-key"]) || DEFAULT_LIBRARY_KEY;
+}
+
+function normalizeLibraryKey(value) {
+  return String(value || "")
+    .trim()
+    .replace(/\s+/g, "-")
+    .slice(0, 64);
 }

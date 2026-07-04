@@ -1,9 +1,13 @@
-const STORAGE_KEY = "exercise-video-library:v1";
+const LEGACY_STORAGE_KEY = "exercise-video-library:v1";
+const STORAGE_PREFIX = "exercise-video-library:v2";
+const LIBRARY_KEY_STORAGE = "exercise-video-library:library-key";
+const DEFAULT_LIBRARY_KEY = "default";
 const BILIBILI_METADATA_PROXY = "/api/bilibili";
 const VIDEOS_API = "/api/videos";
 
 const state = {
-  videos: loadVideos(),
+  libraryKey: getInitialLibraryKey(),
+  videos: [],
   activeId: null,
   activeCategory: "all",
   storageMode: "local",
@@ -23,6 +27,7 @@ const elements = {
   statusLine: document.querySelector("#statusLine"),
   videoCount: document.querySelector("#videoCount"),
   exportButton: document.querySelector("#exportButton"),
+  libraryButton: document.querySelector("#libraryButton"),
   openAddButton: document.querySelector("#openAddButton"),
   closeAddButton: document.querySelector("#closeAddButton"),
   addModal: document.querySelector("#addModal"),
@@ -39,8 +44,11 @@ const elements = {
   playerFrame: document.querySelector("#playerFrame"),
 };
 
+state.videos = loadVideos();
+
 elements.form.addEventListener("submit", handleSubmit);
 elements.exportButton.addEventListener("click", exportVideos);
+elements.libraryButton.addEventListener("click", switchLibrary);
 elements.openAddButton.addEventListener("click", openAddModal);
 elements.closeAddButton.addEventListener("click", closeAddModal);
 elements.closePlayerButton.addEventListener("click", closePlayerModal);
@@ -55,6 +63,22 @@ document.addEventListener("keydown", handleKeydown);
 initializeApp();
 
 async function initializeApp() {
+  renderLibraryKey();
+  render();
+  await loadRemoteVideos();
+  await hydrateSavedBilibiliVideos();
+}
+
+async function switchLibrary() {
+  const nextLibraryKey = normalizeLibraryKey(window.prompt("输入库名/暗号", state.libraryKey));
+  if (!nextLibraryKey || nextLibraryKey === state.libraryKey) return;
+
+  state.libraryKey = nextLibraryKey;
+  state.activeCategory = "all";
+  localStorage.setItem(LIBRARY_KEY_STORAGE, state.libraryKey);
+  setLibraryUrlParam(state.libraryKey);
+  state.videos = loadVideos();
+  renderLibraryKey();
   render();
   await loadRemoteVideos();
   await hydrateSavedBilibiliVideos();
@@ -435,6 +459,11 @@ function render() {
   elements.videoCount.textContent = `${state.videos.length} 个视频`;
 }
 
+function renderLibraryKey() {
+  elements.libraryButton.textContent = `库 ${state.libraryKey}`;
+  elements.libraryButton.title = `当前库：${state.libraryKey}`;
+}
+
 function renderFilters() {
   const categories = getCategories();
   if (!categories.includes(state.activeCategory)) state.activeCategory = "all";
@@ -586,7 +615,7 @@ async function handleEditSubmit(event) {
 async function loadRemoteVideos() {
   try {
     const localVideos = loadVideos();
-    const response = await fetch(VIDEOS_API);
+    const response = await fetch(videosApiUrl());
     if (!response.ok) throw new Error("remote unavailable");
     const videos = await response.json();
     state.storageMode = "remote";
@@ -612,7 +641,7 @@ async function persistVideos(videos) {
       "Content-Type": "application/json",
       ...writeTokenHeader(),
     },
-    body: JSON.stringify({ videos }),
+    body: JSON.stringify({ libraryKey: state.libraryKey, videos }),
   });
 
   if (response.status === 401) {
@@ -632,7 +661,7 @@ async function deletePersistedVideo(id) {
     return;
   }
 
-  const response = await fetch(`${VIDEOS_API}?id=${encodeURIComponent(id)}`, {
+  const response = await fetch(videosApiUrl({ id }), {
     method: "DELETE",
     headers: writeTokenHeader(),
   });
@@ -652,7 +681,7 @@ async function updatePersistedVideo(id, updates) {
     return updates;
   }
 
-  const response = await fetch(`${VIDEOS_API}?id=${encodeURIComponent(id)}`, {
+  const response = await fetch(videosApiUrl({ id }), {
     method: "PATCH",
     headers: {
       "Content-Type": "application/json",
@@ -682,7 +711,10 @@ function mergeVideos(incomingVideos, existingVideos) {
 }
 
 function writeTokenHeader() {
-  return state.writeToken ? { "x-app-token": state.writeToken } : {};
+  return {
+    "x-library-key": state.libraryKey,
+    ...(state.writeToken ? { "x-app-token": state.writeToken } : {}),
+  };
 }
 
 function promptForWriteToken() {
@@ -716,6 +748,7 @@ function createVideo(entry, metadata, category) {
 
   return {
     id: crypto.randomUUID(),
+    libraryKey: state.libraryKey,
     url: entry.url,
     title,
     category,
@@ -839,14 +872,50 @@ function setEditStatus(message) {
 
 function loadVideos() {
   try {
-    return JSON.parse(localStorage.getItem(STORAGE_KEY)) || [];
+    const stored = localStorage.getItem(getStorageKey());
+    if (stored) return JSON.parse(stored) || [];
+    if (state.libraryKey === DEFAULT_LIBRARY_KEY) return JSON.parse(localStorage.getItem(LEGACY_STORAGE_KEY)) || [];
+    return [];
   } catch {
     return [];
   }
 }
 
 function saveVideos() {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(state.videos));
+  localStorage.setItem(getStorageKey(), JSON.stringify(state.videos));
+}
+
+function videosApiUrl(params = {}) {
+  const searchParams = new URLSearchParams({
+    library: state.libraryKey,
+  });
+  Object.entries(params).forEach(([key, value]) => {
+    if (value !== undefined && value !== null) searchParams.set(key, value);
+  });
+  return `${VIDEOS_API}?${searchParams.toString()}`;
+}
+
+function getInitialLibraryKey() {
+  const urlLibraryKey = normalizeLibraryKey(new URLSearchParams(window.location.search).get("library"));
+  if (urlLibraryKey) {
+    localStorage.setItem(LIBRARY_KEY_STORAGE, urlLibraryKey);
+    return urlLibraryKey;
+  }
+
+  return normalizeLibraryKey(localStorage.getItem(LIBRARY_KEY_STORAGE)) || DEFAULT_LIBRARY_KEY;
+}
+
+function normalizeLibraryKey(value) {
+  return String(value || "")
+    .trim()
+    .replace(/\s+/g, "-")
+    .slice(0, 64);
+}
+
+function setLibraryUrlParam(libraryKey) {
+  const url = new URL(window.location.href);
+  url.searchParams.set("library", libraryKey);
+  window.history.replaceState({}, "", url);
 }
 
 async function hydrateSavedBilibiliVideos() {

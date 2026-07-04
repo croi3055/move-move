@@ -1,4 +1,5 @@
 const TABLE = "videos";
+const DEFAULT_LIBRARY_KEY = "default";
 
 export default async function handler(request, response) {
   if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
@@ -6,35 +7,37 @@ export default async function handler(request, response) {
     return;
   }
 
+  const libraryKey = getLibraryKey(request);
+
   if (request.method === "GET") {
-    await listVideos(response);
+    await listVideos(response, libraryKey);
     return;
   }
 
   if (request.method === "POST") {
-    if (!isAuthorized(request)) {
+    if (!isAuthorized(request, libraryKey)) {
       response.status(401).json({ error: "Unauthorized" });
       return;
     }
-    await createVideos(request, response);
+    await createVideos(request, response, libraryKey);
     return;
   }
 
   if (request.method === "DELETE") {
-    if (!isAuthorized(request)) {
+    if (!isAuthorized(request, libraryKey)) {
       response.status(401).json({ error: "Unauthorized" });
       return;
     }
-    await deleteVideo(request, response);
+    await deleteVideo(request, response, libraryKey);
     return;
   }
 
   if (request.method === "PATCH") {
-    if (!isAuthorized(request)) {
+    if (!isAuthorized(request, libraryKey)) {
       response.status(401).json({ error: "Unauthorized" });
       return;
     }
-    await updateVideo(request, response);
+    await updateVideo(request, response, libraryKey);
     return;
   }
 
@@ -42,12 +45,12 @@ export default async function handler(request, response) {
   response.status(405).json({ error: "Method not allowed" });
 }
 
-async function listVideos(response) {
-  const data = await supabaseRequest(`${TABLE}?select=*&order=created_at.desc`);
+async function listVideos(response, libraryKey) {
+  const data = await supabaseRequest(`${TABLE}?library_key=eq.${encodeURIComponent(libraryKey)}&select=*&order=created_at.desc`);
   response.status(200).json(data.map(fromRow));
 }
 
-async function createVideos(request, response) {
+async function createVideos(request, response, libraryKey) {
   const body = parseBody(request.body);
   const videos = Array.isArray(body?.videos) ? body.videos : [];
 
@@ -56,8 +59,8 @@ async function createVideos(request, response) {
     return;
   }
 
-  const rows = videos.map(toRow);
-  const data = await supabaseRequest(`${TABLE}?on_conflict=url`, {
+  const rows = videos.map((video) => toRow(video, libraryKey));
+  const data = await supabaseRequest(`${TABLE}?on_conflict=library_key,url`, {
     method: "POST",
     headers: {
       Prefer: "resolution=merge-duplicates,return=representation",
@@ -68,7 +71,7 @@ async function createVideos(request, response) {
   response.status(200).json(data.map(fromRow));
 }
 
-async function deleteVideo(request, response) {
+async function deleteVideo(request, response, libraryKey) {
   const id = request.query.id;
 
   if (!id) {
@@ -76,7 +79,7 @@ async function deleteVideo(request, response) {
     return;
   }
 
-  await supabaseRequest(`${TABLE}?id=eq.${encodeURIComponent(id)}`, {
+  await supabaseRequest(`${TABLE}?id=eq.${encodeURIComponent(id)}&library_key=eq.${encodeURIComponent(libraryKey)}`, {
     method: "DELETE",
     headers: {
       Prefer: "return=minimal",
@@ -86,7 +89,7 @@ async function deleteVideo(request, response) {
   response.status(204).end();
 }
 
-async function updateVideo(request, response) {
+async function updateVideo(request, response, libraryKey) {
   const id = request.query.id;
   const body = parseBody(request.body);
 
@@ -104,7 +107,7 @@ async function updateVideo(request, response) {
     return;
   }
 
-  const data = await supabaseRequest(`${TABLE}?id=eq.${encodeURIComponent(id)}`, {
+  const data = await supabaseRequest(`${TABLE}?id=eq.${encodeURIComponent(id)}&library_key=eq.${encodeURIComponent(libraryKey)}`, {
     method: "PATCH",
     headers: {
       Prefer: "return=representation",
@@ -136,10 +139,11 @@ async function supabaseRequest(path, options = {}) {
   return response.json();
 }
 
-function isAuthorized(request) {
+function isAuthorized(request, libraryKey) {
   const token = process.env.APP_WRITE_TOKEN;
   if (!token) return true;
-  return request.headers["x-app-token"] === token;
+  if (request.headers["x-app-token"] === token) return true;
+  return libraryKey !== DEFAULT_LIBRARY_KEY && normalizeLibraryKey(request.headers["x-library-key"]) === libraryKey;
 }
 
 function parseBody(body) {
@@ -154,9 +158,10 @@ function parseBody(body) {
   return body;
 }
 
-function toRow(video) {
+function toRow(video, libraryKey) {
   return {
     id: video.id,
+    library_key: libraryKey,
     url: video.url,
     title: video.title,
     category: video.category || "未分类",
@@ -171,6 +176,7 @@ function toRow(video) {
 function fromRow(row) {
   return {
     id: row.id,
+    libraryKey: row.library_key || DEFAULT_LIBRARY_KEY,
     url: row.url,
     title: row.title,
     category: row.category,
@@ -180,4 +186,16 @@ function fromRow(row) {
     kind: row.kind,
     createdAt: new Date(row.created_at).getTime(),
   };
+}
+
+function getLibraryKey(request) {
+  return normalizeLibraryKey(request.query.library || request.headers["x-library-key"]) || DEFAULT_LIBRARY_KEY;
+}
+
+function normalizeLibraryKey(value) {
+  const rawValue = Array.isArray(value) ? value[0] : value;
+  return String(rawValue || "")
+    .trim()
+    .replace(/\s+/g, "-")
+    .slice(0, 64);
 }
