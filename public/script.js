@@ -465,7 +465,8 @@ function isBilibiliImageUrl(url) {
 function getThumbnailSrc(video) {
   const thumbnail = video.thumbnail || "";
   if (isBilibiliImageUrl(thumbnail)) return makeBilibiliCoverProxyUrl(thumbnail);
-  return thumbnail || makeFallbackThumbnail(video.source);
+  if (isFallbackThumbnail(thumbnail)) return makeFallbackThumbnail(video.title || getDisplaySource(video));
+  return thumbnail;
 }
 
 function getPlayableEmbedUrl(video) {
@@ -489,14 +490,40 @@ function getPlayableEmbedUrl(video) {
 }
 
 function makeFallbackThumbnail(label) {
-  const lines = getThumbnailTextLines(label || "Workout").map((line) => encodeURIComponent(line));
-  return `data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 640 360'%3E%3Crect width='640' height='360' fill='%23256d69'/%3E%3Cpath d='M0 280c80-80 170-96 270-48s208 48 370-46v174H0z' fill='%23efb45d' opacity='.78'/%3E%3Ccircle cx='520' cy='92' r='56' fill='%23d8ece7' opacity='.86'/%3E%3Ctext x='44' y='156' font-family='Arial,sans-serif' font-size='42' font-weight='700' fill='%23fffdf7'%3E${lines[0] || ""}%3C/text%3E%3Ctext x='44' y='212' font-family='Arial,sans-serif' font-size='42' font-weight='700' fill='%23fffdf7'%3E${lines[1] || ""}%3C/text%3E%3C/svg%3E`;
+  const lines = getThumbnailTextLines(label || "未命名").map(escapeSvgText);
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 360">
+  <defs>
+    <filter id="paper">
+      <feTurbulence type="fractalNoise" baseFrequency="0.82" numOctaves="4" seed="8"/>
+      <feColorMatrix type="saturate" values="0"/>
+      <feComponentTransfer>
+        <feFuncA type="table" tableValues="0 0.14"/>
+      </feComponentTransfer>
+    </filter>
+    <filter id="soften">
+      <feGaussianBlur stdDeviation="18"/>
+    </filter>
+  </defs>
+  <rect width="640" height="360" fill="#f6f0e6"/>
+  <rect width="640" height="360" filter="url(#paper)" opacity="0.5"/>
+  <rect x="34" y="34" width="572" height="292" rx="30" fill="#fffaf2" opacity="0.42"/>
+  <text x="58" y="158" font-family="Arial, sans-serif" font-size="38" font-weight="700" fill="#2f332f">${lines[0] || ""}</text>
+  <text x="58" y="210" font-family="Arial, sans-serif" font-size="38" font-weight="700" fill="#2f332f">${lines[1] || ""}</text>
+</svg>`;
+  return `data:image/svg+xml,${encodeURIComponent(svg)}`;
 }
 
 function getThumbnailTextLines(label) {
   const compactLabel = String(label).replace(/\s+/g, " ").trim();
   if (compactLabel.length <= 12) return [compactLabel];
   return [compactLabel.slice(0, 12), compactLabel.slice(12, 24) + (compactLabel.length > 24 ? "..." : "")];
+}
+
+function escapeSvgText(text) {
+  return String(text)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
 }
 
 function render() {
@@ -807,16 +834,12 @@ function createVideo(entry, metadata, category) {
     url: entry.url,
     title,
     category,
-    thumbnail: metadata.thumbnail || (shouldUseGeneratedThumbnail(metadata) ? makeFallbackThumbnail(title) : ""),
+    thumbnail: metadata.thumbnail || "",
     source: metadata.source,
     embedUrl: metadata.embedUrl,
     kind: metadata.kind,
     createdAt: Date.now(),
   };
-}
-
-function shouldUseGeneratedThumbnail(metadata) {
-  return metadata.kind === "external" || metadata.source === "小红书";
 }
 
 function parseVideoEntries(value) {
