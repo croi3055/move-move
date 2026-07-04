@@ -889,6 +889,10 @@ function saveVideos() {
   localStorage.setItem(getStorageKey(), JSON.stringify(state.videos));
 }
 
+function getStorageKey() {
+  return `${STORAGE_PREFIX}:${state.libraryKey}`;
+}
+
 function videosApiUrl(params = {}) {
   const searchParams = new URLSearchParams({
     library: state.libraryKey,
@@ -906,7 +910,7 @@ function getInitialLibraryKey() {
     return urlLibraryKey;
   }
 
-  return normalizeLibraryKey(localStorage.getItem(LIBRARY_KEY_STORAGE)) || DEFAULT_LIBRARY_KEY;
+  return DEFAULT_LIBRARY_KEY;
 }
 
 function normalizeLibraryKey(value) {
@@ -918,7 +922,11 @@ function normalizeLibraryKey(value) {
 
 function setLibraryUrlParam(libraryKey) {
   const url = new URL(window.location.href);
-  url.searchParams.set("library", libraryKey);
+  if (libraryKey === DEFAULT_LIBRARY_KEY) {
+    url.searchParams.delete("library");
+  } else {
+    url.searchParams.set("library", libraryKey);
+  }
   window.history.replaceState({}, "", url);
 }
 
