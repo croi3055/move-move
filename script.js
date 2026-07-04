@@ -145,7 +145,7 @@ async function getVideoMetadata(url) {
   const parsed = parseVideoUrl(url);
   const fallback = {
     title: "",
-    thumbnail: parsed.thumbnail || makeFallbackThumbnail(parsed.source),
+    thumbnail: parsed.thumbnail || "",
     source: parsed.source,
     embedUrl: parsed.embedUrl,
     kind: parsed.kind,
@@ -213,7 +213,20 @@ function parseVideoUrl(url) {
     };
   }
 
+  if (isXiaohongshuHost(host)) {
+    return {
+      source: "小红书",
+      kind: "external",
+      embedUrl: url,
+      thumbnail: "",
+    };
+  }
+
   return genericVideo(url, host);
+}
+
+function isXiaohongshuHost(host) {
+  return host.includes("xiaohongshu.com") || host.includes("xhslink.com") || host.includes("xhs.cn");
 }
 
 function genericVideo(url, host = "视频链接") {
@@ -406,8 +419,14 @@ function getPlayableEmbedUrl(video) {
 }
 
 function makeFallbackThumbnail(label) {
-  const text = encodeURIComponent(label || "Workout");
-  return `data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 640 360'%3E%3Crect width='640' height='360' fill='%23256d69'/%3E%3Cpath d='M0 280c80-80 170-96 270-48s208 48 370-46v174H0z' fill='%23efb45d' opacity='.78'/%3E%3Ccircle cx='520' cy='92' r='56' fill='%23d8ece7' opacity='.86'/%3E%3Ctext x='42' y='196' font-family='Arial,sans-serif' font-size='46' font-weight='700' fill='%23fffdf7'%3E${text}%3C/text%3E%3C/svg%3E`;
+  const lines = getThumbnailTextLines(label || "Workout").map((line) => encodeURIComponent(line));
+  return `data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 640 360'%3E%3Crect width='640' height='360' fill='%23256d69'/%3E%3Cpath d='M0 280c80-80 170-96 270-48s208 48 370-46v174H0z' fill='%23efb45d' opacity='.78'/%3E%3Ccircle cx='520' cy='92' r='56' fill='%23d8ece7' opacity='.86'/%3E%3Ctext x='44' y='156' font-family='Arial,sans-serif' font-size='42' font-weight='700' fill='%23fffdf7'%3E${lines[0] || ""}%3C/text%3E%3Ctext x='44' y='212' font-family='Arial,sans-serif' font-size='42' font-weight='700' fill='%23fffdf7'%3E${lines[1] || ""}%3C/text%3E%3C/svg%3E`;
+}
+
+function getThumbnailTextLines(label) {
+  const compactLabel = String(label).replace(/\s+/g, " ").trim();
+  if (compactLabel.length <= 12) return [compactLabel];
+  return [compactLabel.slice(0, 12), compactLabel.slice(12, 24) + (compactLabel.length > 24 ? "..." : "")];
 }
 
 function render() {
@@ -489,6 +508,11 @@ function renderCards() {
 }
 
 function playVideo(video) {
+  if (video.kind === "external") {
+    window.open(video.embedUrl || video.url, "_blank", "noopener");
+    return;
+  }
+
   state.activeId = video.id;
   elements.playerModal.hidden = false;
   elements.playerSource.textContent = `${video.source} · ${video.category}`;
@@ -688,12 +712,14 @@ function normalizeCategory(category) {
 }
 
 function createVideo(entry, metadata, category) {
+  const title = entry.title || metadata.title || fallbackTitle(entry.url, metadata.source);
+
   return {
     id: crypto.randomUUID(),
     url: entry.url,
-    title: entry.title || metadata.title || fallbackTitle(entry.url, metadata.source),
+    title,
     category,
-    thumbnail: metadata.thumbnail,
+    thumbnail: metadata.thumbnail || (metadata.source === "小红书" ? makeFallbackThumbnail(title) : ""),
     source: metadata.source,
     embedUrl: metadata.embedUrl,
     kind: metadata.kind,
