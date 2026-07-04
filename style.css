@@ -74,7 +74,9 @@ button {
 }
 
 .top-actions {
-  flex: 0 0 auto;
+  flex: 1 1 auto;
+  justify-content: flex-end;
+  min-width: 0;
 }
 
 .eyebrow,
@@ -261,7 +263,8 @@ select:focus {
 
 .search-box {
   position: relative;
-  min-width: min(360px, 48vw);
+  flex: 0 1 460px;
+  min-width: 240px;
 }
 
 .search-box span {
@@ -277,11 +280,42 @@ select:focus {
   padding-left: 36px;
 }
 
-#categoryFilter {
-  width: auto;
-  min-width: 132px;
+.category-filter {
+  display: flex;
+  gap: 8px;
+  margin: -4px 0 18px;
+  overflow-x: auto;
+  padding: 4px 0 8px;
+  scrollbar-width: thin;
+}
+
+.filter-pill {
+  flex: 0 0 auto;
+  min-height: 34px;
+  border: 0;
   border-radius: 999px;
   background: var(--chip);
+  color: var(--muted);
+  padding: 0 13px;
+  font-size: 0.86rem;
+  font-weight: 700;
+  white-space: nowrap;
+  transition-property: background-color, color, transform;
+  transition-duration: 140ms;
+}
+
+.filter-pill:hover {
+  background: var(--chip-hover);
+  color: var(--ink);
+}
+
+.filter-pill:active {
+  transform: scale(0.96);
+}
+
+.filter-pill[aria-pressed="true"] {
+  background: var(--ink);
+  color: #fff;
 }
 
 .video-grid {
@@ -425,13 +459,45 @@ select:focus {
 
 .page-footer {
   justify-content: center;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   margin-top: 42px;
   padding: 22px 0 8px;
   color: var(--subtle);
   font-size: 0.82rem;
   text-align: center;
   font-variant-numeric: tabular-nums;
+}
+
+.footer-copy {
+  display: inline-flex;
+  flex-wrap: nowrap;
+  justify-content: center;
+  gap: 6px 14px;
+  min-width: 0;
+}
+
+#videoCount {
+  flex: 0 0 auto;
+}
+
+.footer-note {
+  min-width: 0;
+}
+
+.footer-export-button {
+  flex: 0 0 auto;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  padding: 4px 8px;
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.footer-export-button:hover {
+  background: var(--chip);
+  color: var(--ink);
 }
 
 .modal-backdrop {
@@ -506,17 +572,9 @@ select:focus {
     width: 100%;
   }
 
-  .controls {
-    display: grid;
-    width: 100%;
-  }
-
   .search-box {
-    min-width: 100%;
-  }
-
-  #categoryFilter {
-    width: 100%;
+    flex: 1 1 auto;
+    min-width: 0;
   }
 
   .video-grid {
@@ -536,6 +594,14 @@ select:focus {
 }
 
 @media (max-width: 520px) {
+  .top-actions {
+    gap: 8px;
+  }
+
+  .primary-button {
+    padding: 0 12px;
+  }
+
   .video-grid {
     grid-template-columns: 1fr;
   }

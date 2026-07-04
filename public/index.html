@@ -4,17 +4,17 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>动一动</title>
-    <link rel="stylesheet" href="./style.css?v=10" />
+    <link rel="stylesheet" href="./style.css?v=11" />
   </head>
   <body>
     <main class="app-shell">
       <header class="topbar">
         <div class="brand-mark">Workout</div>
         <div class="top-actions">
-          <button class="secondary-button export-button" type="button" id="exportButton">
-            <span aria-hidden="true">⇩</span>
-            导出
-          </button>
+          <label class="search-box">
+            <span aria-hidden="true">⌕</span>
+            <input id="searchInput" type="search" placeholder="搜索标题或分类" />
+          </label>
           <button class="primary-button add-video-button" type="button" id="openAddButton">
             <span aria-hidden="true">＋</span>
             添加视频
@@ -27,24 +27,19 @@
           <div>
             <h2 id="libraryTitle">视频画廊</h2>
           </div>
-          <div class="controls">
-            <label class="search-box">
-              <span aria-hidden="true">⌕</span>
-              <input id="searchInput" type="search" placeholder="搜索标题或分类" />
-            </label>
-            <select id="categoryFilter" aria-label="按分类筛选">
-              <option value="all">全部分类</option>
-            </select>
-          </div>
         </div>
+        <div class="category-filter" id="categoryFilter" aria-label="按分类筛选"></div>
 
         <div class="video-grid" id="videoGrid"></div>
         <p class="empty-state" id="emptyState">还没有视频</p>
       </section>
 
       <footer class="page-footer">
-        <span id="videoCount">0 个视频</span>
-        <span>右上角添加视频，保存后会出现在画廊。</span>
+        <span class="footer-copy">
+          <span id="videoCount">0 个视频</span>
+          <span class="footer-note">右上角添加视频，保存后会出现在画廊。</span>
+        </span>
+        <button class="footer-export-button" type="button" id="exportButton">导出</button>
       </footer>
     </main>
 
@@ -143,6 +138,6 @@
       </article>
     </template>
 
-    <script src="./script.js?v=10"></script>
+    <script src="./script.js?v=11"></script>
   </body>
 </html>

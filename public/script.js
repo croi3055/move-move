@@ -5,6 +5,7 @@ const VIDEOS_API = "/api/videos";
 const state = {
   videos: loadVideos(),
   activeId: null,
+  activeCategory: "all",
   storageMode: "local",
   writeToken: localStorage.getItem("exercise-video-library:write-token") || "",
 };
@@ -49,7 +50,6 @@ elements.playerModal.addEventListener("click", handleBackdropClick);
 elements.editModal.addEventListener("click", handleBackdropClick);
 elements.editForm.addEventListener("submit", handleEditSubmit);
 elements.searchInput.addEventListener("input", render);
-elements.categoryFilter.addEventListener("change", render);
 document.addEventListener("keydown", handleKeydown);
 
 initializeApp();
@@ -418,7 +418,7 @@ function render() {
 
 function renderFilters() {
   const categories = getCategories();
-  const currentFilter = elements.categoryFilter.value || "all";
+  if (!categories.includes(state.activeCategory)) state.activeCategory = "all";
 
   elements.categoryOptions.replaceChildren(
     ...categories.map((category) => {
@@ -428,16 +428,27 @@ function renderFilters() {
     }),
   );
 
+  const filterOptions = ["all", ...categories];
   elements.categoryFilter.replaceChildren(
-    new Option("全部分类", "all"),
-    ...categories.map((category) => new Option(category, category)),
+    ...filterOptions.map((category) => {
+      const button = document.createElement("button");
+      const isActive = category === state.activeCategory;
+      button.type = "button";
+      button.className = "filter-pill";
+      button.textContent = category === "all" ? "全部" : category;
+      button.setAttribute("aria-pressed", String(isActive));
+      button.addEventListener("click", () => {
+        state.activeCategory = category;
+        render();
+      });
+      return button;
+    }),
   );
-  elements.categoryFilter.value = categories.includes(currentFilter) ? currentFilter : "all";
 }
 
 function renderCards() {
   const query = elements.searchInput.value.trim().toLowerCase();
-  const filter = elements.categoryFilter.value;
+  const filter = state.activeCategory;
   const videos = state.videos.filter((video) => {
     const matchesFilter = filter === "all" || video.category === filter;
     const haystack = `${video.title} ${video.category} ${video.source}`.toLowerCase();
