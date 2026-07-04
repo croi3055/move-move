@@ -112,7 +112,7 @@ https://workout.yourdomain.com/?library=kiokumo
 https://workout.yourdomain.com/?library=friend-a
 ```
 
-- 也可以点击页面左上角的 `库 ...` 按钮切换库名。切换后页面会自动更新网址。
+- 也可以点击页面左上角的库名按钮切换库名。切换后页面会自动更新网址。
 - 如果设置了 `APP_WRITE_TOKEN`，默认库第一次添加、编辑、删除时页面会提示输入写入密钥。
 - 非默认库会把 library key 当作这个库自己的写入暗号。请给朋友一个不容易猜到的库名，例如 `friend-a-8k2m`，不要只用 `friend` 这种太短的名字。
 - 只观看不需要写入密钥。

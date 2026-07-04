@@ -460,7 +460,7 @@ function render() {
 }
 
 function renderLibraryKey() {
-  elements.libraryButton.textContent = `库 ${getLibraryDisplayName(state.libraryKey)}`;
+  elements.libraryButton.textContent = getLibraryDisplayName(state.libraryKey);
   elements.libraryButton.title = `当前库：${state.libraryKey}`;
 }
 
