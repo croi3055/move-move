@@ -37,6 +37,12 @@ createServer(async (request, response) => {
 });
 
 async function handleBilibiliMetadata(url, response) {
+  const coverUrl = url.searchParams.get("cover") || "";
+  if (coverUrl) {
+    await handleBilibiliCoverProxy(coverUrl, response);
+    return;
+  }
+
   const bvid = url.searchParams.get("bvid") || "";
 
   if (!/^BV[a-zA-Z0-9]+$/.test(bvid)) {
@@ -82,6 +88,49 @@ async function handleBilibiliMetadata(url, response) {
       },
     }),
   );
+}
+
+async function handleBilibiliCoverProxy(coverUrl, response) {
+  const safeCoverUrl = getSafeBilibiliCoverUrl(coverUrl);
+
+  if (!safeCoverUrl) {
+    response.writeHead(400, { "Content-Type": "application/json; charset=utf-8" });
+    response.end(JSON.stringify({ code: -1, message: "Invalid cover url" }));
+    return;
+  }
+
+  const upstream = await fetch(safeCoverUrl, {
+    headers: {
+      Referer: "https://www.bilibili.com/",
+      "User-Agent": "Mozilla/5.0",
+    },
+  });
+
+  if (!upstream.ok) {
+    response.writeHead(upstream.status, { "Content-Type": "application/json; charset=utf-8" });
+    response.end(JSON.stringify({ code: -1, message: "Bilibili cover request failed" }));
+    return;
+  }
+
+  const imageBuffer = Buffer.from(await upstream.arrayBuffer());
+  response.writeHead(200, {
+    "Cache-Control": "public, max-age=86400",
+    "Content-Type": upstream.headers.get("content-type") || "image/jpeg",
+  });
+  response.end(imageBuffer);
+}
+
+function getSafeBilibiliCoverUrl(coverUrl) {
+  try {
+    const parsedUrl = new URL(coverUrl.startsWith("//") ? `https:${coverUrl}` : coverUrl);
+    const isAllowedHost = parsedUrl.hostname === "hdslb.com" || parsedUrl.hostname.endsWith(".hdslb.com");
+    const isAllowedProtocol = parsedUrl.protocol === "https:" || parsedUrl.protocol === "http:";
+    if (!isAllowedHost || !isAllowedProtocol) return "";
+    parsedUrl.protocol = "https:";
+    return parsedUrl.toString();
+  } catch {
+    return "";
+  }
 }
 
 async function serveStaticFile(url, response) {

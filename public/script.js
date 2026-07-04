@@ -314,11 +314,14 @@ function makeBilibiliEmbedUrl({ bvid, cid }) {
   const params = new URLSearchParams({
     bvid,
     as_wide: "1",
+    auto_play: "0",
     autoplay: "0",
     danmaku: "0",
     hideCoverInfo: "1",
+    isMuted: "0",
     muted: "0",
     p: "1",
+    volume: "1",
   });
 
   if (cid) params.set("cid", cid);
@@ -328,7 +331,46 @@ function makeBilibiliEmbedUrl({ bvid, cid }) {
 function normalizeBilibiliImageUrl(url) {
   if (!url) return "";
   const normalizedUrl = url.startsWith("//") ? `https:${url}` : url.replace(/^http:\/\//, "https://");
-  return normalizedUrl.includes("/transparent.png") ? "" : normalizedUrl;
+  if (normalizedUrl.includes("/transparent.png")) return "";
+  return isBilibiliImageUrl(normalizedUrl) ? makeBilibiliCoverProxyUrl(normalizedUrl) : normalizedUrl;
+}
+
+function makeBilibiliCoverProxyUrl(url) {
+  return `${BILIBILI_METADATA_PROXY}?cover=${encodeURIComponent(url)}`;
+}
+
+function isBilibiliImageUrl(url) {
+  try {
+    const parsedUrl = new URL(url, window.location.origin);
+    return parsedUrl.hostname === "hdslb.com" || parsedUrl.hostname.endsWith(".hdslb.com");
+  } catch {
+    return false;
+  }
+}
+
+function getThumbnailSrc(video) {
+  const thumbnail = video.thumbnail || "";
+  if (isBilibiliImageUrl(thumbnail)) return makeBilibiliCoverProxyUrl(thumbnail);
+  return thumbnail || makeFallbackThumbnail(video.source);
+}
+
+function getPlayableEmbedUrl(video) {
+  if (video.source !== "Bilibili") return video.embedUrl;
+
+  const parsed = parseVideoUrl(video.url);
+  if (!parsed.bvid) return video.embedUrl;
+
+  try {
+    const embedUrl = new URL(video.embedUrl || makeBilibiliEmbedUrl({ bvid: parsed.bvid }));
+    embedUrl.searchParams.set("auto_play", "0");
+    embedUrl.searchParams.set("autoplay", "0");
+    embedUrl.searchParams.set("isMuted", "0");
+    embedUrl.searchParams.set("muted", "0");
+    embedUrl.searchParams.set("volume", "1");
+    return embedUrl.toString();
+  } catch {
+    return makeBilibiliEmbedUrl({ bvid: parsed.bvid });
+  }
 }
 
 function makeFallbackThumbnail(label) {
@@ -379,7 +421,7 @@ function renderCards() {
     const editButton = card.querySelector(".edit-button");
     const deleteButton = card.querySelector(".delete-button");
 
-    thumbnail.src = video.thumbnail || makeFallbackThumbnail(video.source);
+    thumbnail.src = getThumbnailSrc(video);
     thumbnail.alt = `${video.title} 的封面`;
     card.querySelector(".source-label").textContent = video.source;
     card.querySelector("h3").textContent = video.title;
@@ -415,12 +457,13 @@ function playVideo(video) {
     player.src = video.embedUrl;
     player.controls = true;
     player.autoplay = true;
+    player.muted = false;
     elements.playerFrame.append(player);
   } else {
     const player = document.createElement("iframe");
-    player.src = video.embedUrl;
+    player.src = getPlayableEmbedUrl(video);
     player.title = video.title;
-    player.allow = "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share";
+    player.allow = "accelerometer; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share";
     player.allowFullscreen = true;
     elements.playerFrame.append(player);
   }
@@ -740,7 +783,11 @@ function saveVideos() {
 async function hydrateSavedBilibiliVideos() {
   const targets = state.videos.filter((video) => {
     const parsed = parseVideoUrl(video.url);
-    return parsed.source === "Bilibili" && parsed.bvid && (isFallbackThumbnail(video.thumbnail) || isLegacyBilibiliEmbed(video.embedUrl));
+    return (
+      parsed.source === "Bilibili" &&
+      parsed.bvid &&
+      (isFallbackThumbnail(video.thumbnail) || isBilibiliImageUrl(video.thumbnail) || isLegacyBilibiliEmbed(video.embedUrl))
+    );
   });
 
   if (!targets.length) return;
