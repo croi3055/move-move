@@ -8,13 +8,13 @@
     <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
     <link rel="icon" type="image/png" href="/assets/favicon.png" />
     <link rel="apple-touch-icon" href="/assets/favicon.png" />
-    <link rel="stylesheet" href="./style.css?v=13" />
+    <link rel="stylesheet" href="./style.css?v=14" />
   </head>
   <body>
     <main class="app-shell">
       <header class="topbar">
         <div class="brand-area">
-          <div class="brand-mark">Workout</div>
+          <div class="brand-mark">我的跟练视频</div>
           <button class="library-button" type="button" id="libraryButton">N</button>
         </div>
         <div class="top-actions">
@@ -23,18 +23,12 @@
             <input id="searchInput" type="search" placeholder="搜索标题或分类" />
           </label>
           <button class="primary-button add-video-button" type="button" id="openAddButton">
-            <span aria-hidden="true">＋</span>
-            添加视频
+            添加
           </button>
         </div>
       </header>
 
-      <section class="library-panel" aria-labelledby="libraryTitle">
-        <div class="toolbar">
-          <div>
-            <h2 id="libraryTitle">视频画廊</h2>
-          </div>
-        </div>
+      <section class="library-panel">
         <div class="category-filter" id="categoryFilter" aria-label="按分类筛选"></div>
 
         <div class="video-grid" id="videoGrid"></div>

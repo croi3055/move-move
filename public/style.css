@@ -68,7 +68,7 @@ button {
 
 .brand-mark {
   color: var(--muted);
-  font-size: 0.92rem;
+  font-size: 1rem;
   font-weight: 700;
   letter-spacing: 0;
 }
@@ -303,17 +303,24 @@ select:focus {
 }
 
 .search-box input {
+  min-height: 34px;
   border-radius: 999px;
   padding-left: 36px;
 }
 
+.add-video-button {
+  min-width: auto;
+  min-height: 34px;
+  padding: 0 14px;
+}
+
 .category-filter {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
-  margin: -4px 0 18px;
-  overflow-x: auto;
-  padding: 4px 0 8px;
-  scrollbar-width: thin;
+  justify-content: center;
+  margin: 2px 0 22px;
+  padding: 4px 0;
 }
 
 .filter-pill {
