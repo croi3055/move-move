@@ -272,11 +272,29 @@ function parseVideoUrl(url) {
     };
   }
 
+  if (isXiaoetongHost(host)) {
+    return {
+      source: "小鹅通",
+      kind: "external",
+      embedUrl: url,
+      thumbnail: "",
+    };
+  }
+
   return genericVideo(url, host);
 }
 
 function isXiaohongshuHost(host) {
   return host.includes("xiaohongshu.com") || host.includes("xhslink.com") || host.includes("xhs.cn");
+}
+
+function isXiaoetongHost(host) {
+  return (
+    host.includes("xet.pomoho.com") ||
+    host.includes("xiaoeknow.com") ||
+    host.includes("xiaoe-tech.com") ||
+    host.includes("xet.tech")
+  );
 }
 
 function genericVideo(url, host = "视频链接") {
@@ -780,12 +798,16 @@ function createVideo(entry, metadata, category) {
     url: entry.url,
     title,
     category,
-    thumbnail: metadata.thumbnail || (metadata.source === "小红书" ? makeFallbackThumbnail(title) : ""),
+    thumbnail: metadata.thumbnail || (shouldUseGeneratedThumbnail(metadata) ? makeFallbackThumbnail(title) : ""),
     source: metadata.source,
     embedUrl: metadata.embedUrl,
     kind: metadata.kind,
     createdAt: Date.now(),
   };
+}
+
+function shouldUseGeneratedThumbnail(metadata) {
+  return metadata.kind === "external" || metadata.source === "小红书";
 }
 
 function parseVideoEntries(value) {
