@@ -21,6 +21,7 @@ const elements = {
   template: document.querySelector("#videoCardTemplate"),
   statusLine: document.querySelector("#statusLine"),
   videoCount: document.querySelector("#videoCount"),
+  exportButton: document.querySelector("#exportButton"),
   openAddButton: document.querySelector("#openAddButton"),
   closeAddButton: document.querySelector("#closeAddButton"),
   addModal: document.querySelector("#addModal"),
@@ -38,6 +39,7 @@ const elements = {
 };
 
 elements.form.addEventListener("submit", handleSubmit);
+elements.exportButton.addEventListener("click", exportVideos);
 elements.openAddButton.addEventListener("click", openAddModal);
 elements.closeAddButton.addEventListener("click", closeAddModal);
 elements.closePlayerButton.addEventListener("click", closePlayerModal);
@@ -107,6 +109,36 @@ async function handleSubmit(event) {
   if (duplicateCount > 0) {
     window.setTimeout(() => alert(`已保存 ${videos.length} 个视频，跳过 ${duplicateCount} 个重复链接。`), 0);
   }
+}
+
+async function exportVideos() {
+  if (!state.videos.length) {
+    window.alert("还没有可以导出的视频。");
+    return;
+  }
+
+  const text = state.videos
+    .map((video) => `【${video.title || "未命名视频"}】 ${video.url}`)
+    .join("\n");
+
+  try {
+    await navigator.clipboard.writeText(text);
+    window.alert(`已复制 ${state.videos.length} 个标题和链接。`);
+  } catch {
+    downloadExportFile(text);
+  }
+}
+
+function downloadExportFile(text) {
+  const blob = new Blob([text], { type: "text/plain;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `动一动-视频导出-${new Date().toISOString().slice(0, 10)}.txt`;
+  document.body.append(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
 }
 
 async function getVideoMetadata(url) {

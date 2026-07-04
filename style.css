@@ -181,6 +181,7 @@ select:focus {
 }
 
 .primary-button,
+.secondary-button,
 .ghost-button,
 .icon-button {
   min-width: 40px;
@@ -192,6 +193,7 @@ select:focus {
 }
 
 .primary-button:active,
+.secondary-button:active,
 .ghost-button:active,
 .icon-button:active,
 .video-card:active {
@@ -213,6 +215,23 @@ select:focus {
 
 .primary-button:hover {
   background: #2a2a2a;
+}
+
+.secondary-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 40px;
+  padding: 0 14px;
+  background: var(--chip);
+  color: var(--ink);
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.secondary-button:hover {
+  background: var(--chip-hover);
 }
 
 .ghost-button,
