@@ -104,7 +104,7 @@ Value: cname.vercel-dns.com
 ## 使用
 
 - 电脑和 iPad 打开同一个部署域名，会读取同一份 Supabase 视频列表。
-- 默认视频库叫 `default`。
+- 默认视频库仍叫 `default`，页面上显示为 `N`。
 - 可以用网址区分不同视频库：
 
 ```txt
@@ -113,6 +113,6 @@ https://workout.yourdomain.com/?library=friend-a
 ```
 
 - 也可以点击页面左上角的 `库 ...` 按钮切换库名。切换后页面会自动更新网址。
-- 如果设置了 `APP_WRITE_TOKEN`，`default` 库第一次添加、编辑、删除时页面会提示输入写入密钥。
-- 非 `default` 的库会把 library key 当作这个库自己的写入暗号。请给朋友一个不容易猜到的库名，例如 `friend-a-8k2m`，不要只用 `friend` 这种太短的名字。
+- 如果设置了 `APP_WRITE_TOKEN`，默认库第一次添加、编辑、删除时页面会提示输入写入密钥。
+- 非默认库会把 library key 当作这个库自己的写入暗号。请给朋友一个不容易猜到的库名，例如 `friend-a-8k2m`，不要只用 `friend` 这种太短的名字。
 - 只观看不需要写入密钥。

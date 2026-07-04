@@ -15,6 +15,9 @@ create table if not exists public.videos (
 alter table public.videos
   add column if not exists library_key text not null default 'default';
 
+alter table public.videos
+  alter column library_key set default 'default';
+
 do $$
 begin
   if exists (

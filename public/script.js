@@ -460,8 +460,12 @@ function render() {
 }
 
 function renderLibraryKey() {
-  elements.libraryButton.textContent = `库 ${state.libraryKey}`;
+  elements.libraryButton.textContent = `库 ${getLibraryDisplayName(state.libraryKey)}`;
   elements.libraryButton.title = `当前库：${state.libraryKey}`;
+}
+
+function getLibraryDisplayName(libraryKey) {
+  return libraryKey === DEFAULT_LIBRARY_KEY ? "N" : libraryKey;
 }
 
 function renderFilters() {
