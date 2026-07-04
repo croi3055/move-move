@@ -549,7 +549,7 @@ function renderCards() {
   const filter = state.activeCategory;
   const videos = state.videos.filter((video) => {
     const matchesFilter = filter === "all" || video.category === filter;
-    const haystack = `${video.title} ${video.category} ${video.source}`.toLowerCase();
+    const haystack = `${video.title} ${video.category} ${getDisplaySource(video)}`.toLowerCase();
     return matchesFilter && haystack.includes(query);
   });
 
@@ -565,7 +565,7 @@ function renderCards() {
 
     thumbnail.src = getThumbnailSrc(video);
     thumbnail.alt = `${video.title} 的封面`;
-    card.querySelector(".source-label").textContent = video.source;
+    card.querySelector(".source-label").textContent = getDisplaySource(video);
     card.querySelector("h3").textContent = video.title;
     card.querySelector(".category-pill").textContent = video.category;
     thumbnailButton.addEventListener("click", () => playVideo(video));
@@ -582,7 +582,7 @@ function renderCards() {
 }
 
 function playVideo(video) {
-  if (video.kind === "external") {
+  if (isExternalEntry(video)) {
     window.open(video.embedUrl || video.url, "_blank", "noopener");
     return;
   }
@@ -609,6 +609,15 @@ function playVideo(video) {
     player.allowFullscreen = true;
     elements.playerFrame.append(player);
   }
+}
+
+function getDisplaySource(video) {
+  const parsed = parseVideoUrl(video.url);
+  return parsed.source || video.source;
+}
+
+function isExternalEntry(video) {
+  return video.kind === "external" || parseVideoUrl(video.url).kind === "external";
 }
 
 function deleteVideo(id) {
