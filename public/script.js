@@ -27,6 +27,7 @@ const elements = {
   statusLine: document.querySelector("#statusLine"),
   videoCount: document.querySelector("#videoCount"),
   exportButton: document.querySelector("#exportButton"),
+  copyLibraryLinkButton: document.querySelector("#copyLibraryLinkButton"),
   libraryButton: document.querySelector("#libraryButton"),
   openAddButton: document.querySelector("#openAddButton"),
   closeAddButton: document.querySelector("#closeAddButton"),
@@ -48,6 +49,7 @@ state.videos = loadVideos();
 
 elements.form.addEventListener("submit", handleSubmit);
 elements.exportButton.addEventListener("click", exportVideos);
+elements.copyLibraryLinkButton.addEventListener("click", copyLibraryLink);
 elements.libraryButton.addEventListener("click", switchLibrary);
 elements.openAddButton.addEventListener("click", openAddModal);
 elements.closeAddButton.addEventListener("click", closeAddModal);
@@ -163,6 +165,30 @@ function downloadExportFile(text) {
   link.click();
   link.remove();
   URL.revokeObjectURL(url);
+}
+
+async function copyLibraryLink() {
+  const url = getLibraryUrl(state.libraryKey);
+
+  try {
+    await navigator.clipboard.writeText(url);
+    window.alert("已复制当前跟练页面链接。");
+  } catch {
+    window.prompt("复制这个链接分享给朋友", url);
+  }
+}
+
+function getLibraryUrl(libraryKey) {
+  const url = new URL(window.location.href);
+  url.hash = "";
+
+  if (libraryKey === DEFAULT_LIBRARY_KEY) {
+    url.searchParams.delete("library");
+  } else {
+    url.searchParams.set("library", libraryKey);
+  }
+
+  return url.toString();
 }
 
 async function getVideoMetadata(url) {
