@@ -458,8 +458,9 @@ select:focus {
 }
 
 .page-footer {
+  flex-direction: column;
   justify-content: center;
-  flex-wrap: nowrap;
+  gap: 6px;
   margin-top: 42px;
   padding: 22px 0 8px;
   color: var(--subtle);
@@ -468,12 +469,11 @@ select:focus {
   font-variant-numeric: tabular-nums;
 }
 
-.footer-copy {
+.footer-actions {
   display: inline-flex;
-  flex-wrap: nowrap;
   justify-content: center;
-  gap: 6px 14px;
-  min-width: 0;
+  align-items: center;
+  gap: 6px;
 }
 
 #videoCount {
@@ -481,7 +481,7 @@ select:focus {
 }
 
 .footer-note {
-  min-width: 0;
+  display: block;
 }
 
 .footer-export-button {
@@ -490,7 +490,7 @@ select:focus {
   border-radius: 999px;
   background: transparent;
   color: var(--muted);
-  padding: 4px 8px;
+  padding: 2px 6px;
   font-size: 0.82rem;
   font-weight: 700;
 }
