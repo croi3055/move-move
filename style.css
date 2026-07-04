@@ -240,7 +240,7 @@ select:focus {
 .secondary-button:active,
 .ghost-button:active,
 .icon-button:active,
-.video-card:active {
+.thumbnail-button:active {
   transform: scale(0.96);
 }
 
@@ -400,12 +400,12 @@ select:focus {
   transition-timing-function: cubic-bezier(0.2, 0, 0, 1);
 }
 
-.video-card:hover,
-.video-card:focus-visible {
+.video-card:has(.thumbnail-button:hover),
+.video-card:has(.thumbnail-button:focus-visible) {
   transform: translateY(-3px);
 }
 
-.video-card:focus-visible {
+.video-card:has(.thumbnail-button:focus-visible) {
   border-radius: 12px;
   box-shadow: 0 0 0 3px rgba(26, 115, 232, 0.22);
 }
@@ -416,6 +416,7 @@ select:focus {
   width: 100%;
   aspect-ratio: 16 / 9;
   overflow: hidden;
+  border: 0;
   border-radius: 14px;
   background:
     linear-gradient(135deg, #ececea 0%, #deded9 100%);
@@ -423,6 +424,8 @@ select:focus {
     0 12px 28px rgba(0, 0, 0, 0.09),
     0 2px 8px rgba(0, 0, 0, 0.06),
     inset 0 0 0 1px rgba(0, 0, 0, 0.08);
+  padding: 0;
+  text-align: left;
 }
 
 .thumbnail-button::after {
@@ -447,12 +450,13 @@ select:focus {
   transition-duration: 180ms;
 }
 
-.video-card:hover .thumbnail-button::after,
-.video-card:focus-visible .thumbnail-button::after {
+.thumbnail-button:hover::after,
+.thumbnail-button:focus-visible::after {
   opacity: 1;
 }
 
-.thumbnail-button:hover img {
+.thumbnail-button:hover img,
+.thumbnail-button:focus-visible img {
   filter: saturate(1.06) contrast(1.02);
   transform: scale(1.025);
 }
@@ -477,8 +481,8 @@ select:focus {
   transition-timing-function: cubic-bezier(0.2, 0, 0, 1);
 }
 
-.video-card:hover .play-mark,
-.video-card:focus-visible .play-mark {
+.thumbnail-button:hover .play-mark,
+.thumbnail-button:focus-visible .play-mark {
   opacity: 1;
   transform: translate(-48%, -50%) scale(1);
   filter: blur(0);

@@ -383,10 +383,11 @@ function makeBilibiliEmbedUrl({ bvid, cid }) {
   const params = new URLSearchParams({
     bvid,
     as_wide: "1",
-    auto_play: "0",
-    autoplay: "0",
+    auto_play: "1",
+    autoplay: "1",
     danmaku: "0",
     hideCoverInfo: "1",
+    is_muted: "0",
     isMuted: "0",
     muted: "0",
     p: "1",
@@ -431,8 +432,9 @@ function getPlayableEmbedUrl(video) {
 
   try {
     const embedUrl = new URL(video.embedUrl || makeBilibiliEmbedUrl({ bvid: parsed.bvid }));
-    embedUrl.searchParams.set("auto_play", "0");
-    embedUrl.searchParams.set("autoplay", "0");
+    embedUrl.searchParams.set("auto_play", "1");
+    embedUrl.searchParams.set("autoplay", "1");
+    embedUrl.searchParams.set("is_muted", "0");
     embedUrl.searchParams.set("isMuted", "0");
     embedUrl.searchParams.set("muted", "0");
     embedUrl.searchParams.set("volume", "1");
@@ -512,6 +514,7 @@ function renderCards() {
 
   videos.forEach((video) => {
     const card = elements.template.content.firstElementChild.cloneNode(true);
+    const thumbnailButton = card.querySelector(".thumbnail-button");
     const thumbnail = card.querySelector("img");
     const editButton = card.querySelector(".edit-button");
     const deleteButton = card.querySelector(".delete-button");
@@ -521,13 +524,7 @@ function renderCards() {
     card.querySelector(".source-label").textContent = video.source;
     card.querySelector("h3").textContent = video.title;
     card.querySelector(".category-pill").textContent = video.category;
-    card.addEventListener("click", () => playVideo(video));
-    card.addEventListener("keydown", (event) => {
-      if (event.key === "Enter" || event.key === " ") {
-        event.preventDefault();
-        playVideo(video);
-      }
-    });
+    thumbnailButton.addEventListener("click", () => playVideo(video));
     editButton.addEventListener("click", (event) => {
       event.stopPropagation();
       openEditModal(video);
@@ -558,12 +555,13 @@ function playVideo(video) {
     player.controls = true;
     player.autoplay = true;
     player.muted = false;
+    player.volume = 1;
     elements.playerFrame.append(player);
   } else {
     const player = document.createElement("iframe");
     player.src = getPlayableEmbedUrl(video);
     player.title = video.title;
-    player.allow = "accelerometer; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share";
+    player.allow = "autoplay; accelerometer; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share";
     player.allowFullscreen = true;
     elements.playerFrame.append(player);
   }
