@@ -506,7 +506,6 @@ function makeFallbackThumbnail(label) {
   </defs>
   <rect width="640" height="360" fill="#f6f0e6"/>
   <rect width="640" height="360" filter="url(#paper)" opacity="0.5"/>
-  <rect x="34" y="34" width="572" height="292" rx="30" fill="#fffaf2" opacity="0.42"/>
   <text x="58" y="158" font-family="Arial, sans-serif" font-size="38" font-weight="700" fill="#2f332f">${lines[0] || ""}</text>
   <text x="58" y="210" font-family="Arial, sans-serif" font-size="38" font-weight="700" fill="#2f332f">${lines[1] || ""}</text>
 </svg>`;
