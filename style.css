@@ -438,11 +438,11 @@ select:focus {
 
 .tag-remove {
   position: absolute;
-  top: -5px;
-  right: -5px;
+  top: -4px;
+  right: -4px;
   display: grid;
-  width: 20px;
-  height: 20px;
+  width: 18px;
+  height: 18px;
   place-items: center;
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.92);
@@ -450,7 +450,7 @@ select:focus {
   box-shadow:
     0 3px 10px rgba(0, 0, 0, 0.18),
     inset 0 0 0 1px rgba(0, 0, 0, 0.06);
-  font-size: 0.78rem;
+  font-size: 0.72rem;
   font-weight: 800;
   line-height: 1;
   pointer-events: none;
@@ -493,6 +493,8 @@ select:focus {
 
 .tag-add-row input {
   min-height: 40px;
+  font-size: 0.84rem;
+  font-weight: 600;
 }
 
 .video-grid {
@@ -749,11 +751,12 @@ select:focus {
 }
 
 .rename-modal {
-  width: min(460px, 100%);
+  width: min(380px, 100%);
+  padding: 20px;
 }
 
 .rename-modal h2 {
-  margin-bottom: 18px;
+  margin-bottom: 16px;
 }
 
 .rename-modal .video-form {
@@ -762,6 +765,12 @@ select:focus {
 
 .rename-modal .modal-actions {
   justify-content: flex-end;
+  gap: 10px;
+}
+
+.rename-modal .status-line {
+  flex: 1 1 auto;
+  min-width: 0;
 }
 
 .player-modal .player-frame {
@@ -832,6 +841,11 @@ select:focus {
   .modal-actions {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .rename-modal .modal-actions {
+    align-items: center;
+    flex-direction: row;
   }
 
   .player-frame,

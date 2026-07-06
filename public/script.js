@@ -50,6 +50,7 @@ const elements = {
   tagRenameForm: document.querySelector("#tagRenameForm"),
   tagRenameInput: document.querySelector("#tagRenameInput"),
   tagRenameStatusLine: document.querySelector("#tagRenameStatusLine"),
+  cancelTagRenameButton: document.querySelector("#cancelTagRenameButton"),
   playerSource: document.querySelector("#playerSource"),
   playerTitle: document.querySelector("#playerTitle"),
   playerFrame: document.querySelector("#playerFrame"),
@@ -75,6 +76,7 @@ elements.editModal.addEventListener("click", handleBackdropClick);
 elements.tagRenameModal.addEventListener("click", handleBackdropClick);
 elements.editForm.addEventListener("submit", handleEditSubmit);
 elements.tagRenameForm.addEventListener("submit", handleTagRenameSubmit);
+elements.cancelTagRenameButton.addEventListener("click", closeTagRenameModal);
 elements.searchInput.addEventListener("input", render);
 document.addEventListener("keydown", handleKeydown);
 
