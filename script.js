@@ -10,6 +10,9 @@ const state = {
   videos: [],
   activeId: null,
   activeCategory: "all",
+  selectedTags: [],
+  editingTags: [],
+  renamingTag: "",
   storageMode: "local",
   writeToken: localStorage.getItem("exercise-video-library:write-token") || "",
 };
@@ -17,8 +20,12 @@ const state = {
 const elements = {
   form: document.querySelector("#videoForm"),
   urlsInput: document.querySelector("#urlsInput"),
-  categoryInput: document.querySelector("#categoryInput"),
-  categoryOptions: document.querySelector("#categoryOptions"),
+  tagPicker: document.querySelector("#tagPicker"),
+  tagInput: document.querySelector("#tagInput"),
+  addTagButton: document.querySelector("#addTagButton"),
+  editTagPicker: document.querySelector("#editTagPicker"),
+  editTagInput: document.querySelector("#editTagInput"),
+  editAddTagButton: document.querySelector("#editAddTagButton"),
   categoryFilter: document.querySelector("#categoryFilter"),
   searchInput: document.querySelector("#searchInput"),
   grid: document.querySelector("#videoGrid"),
@@ -34,12 +41,15 @@ const elements = {
   addModal: document.querySelector("#addModal"),
   playerModal: document.querySelector("#playerModal"),
   editModal: document.querySelector("#editModal"),
+  tagRenameModal: document.querySelector("#tagRenameModal"),
   closePlayerButton: document.querySelector("#closePlayerButton"),
   closeEditButton: document.querySelector("#closeEditButton"),
   editForm: document.querySelector("#editForm"),
   editTitleInput: document.querySelector("#editTitleInput"),
-  editCategoryInput: document.querySelector("#editCategoryInput"),
   editStatusLine: document.querySelector("#editStatusLine"),
+  tagRenameForm: document.querySelector("#tagRenameForm"),
+  tagRenameInput: document.querySelector("#tagRenameInput"),
+  tagRenameStatusLine: document.querySelector("#tagRenameStatusLine"),
   playerSource: document.querySelector("#playerSource"),
   playerTitle: document.querySelector("#playerTitle"),
   playerFrame: document.querySelector("#playerFrame"),
@@ -52,13 +62,19 @@ elements.exportButton.addEventListener("click", exportVideos);
 elements.copyLibraryLinkButton.addEventListener("click", copyLibraryLink);
 elements.libraryButton.addEventListener("click", switchLibrary);
 elements.openAddButton.addEventListener("click", openAddModal);
+elements.addTagButton.addEventListener("click", () => addTypedTag("add"));
+elements.editAddTagButton.addEventListener("click", () => addTypedTag("edit"));
+elements.tagInput.addEventListener("keydown", (event) => handleTagInputKeydown(event, "add"));
+elements.editTagInput.addEventListener("keydown", (event) => handleTagInputKeydown(event, "edit"));
 elements.closeAddButton.addEventListener("click", closeAddModal);
 elements.closePlayerButton.addEventListener("click", closePlayerModal);
 elements.closeEditButton.addEventListener("click", closeEditModal);
 elements.addModal.addEventListener("click", handleBackdropClick);
 elements.playerModal.addEventListener("click", handleBackdropClick);
 elements.editModal.addEventListener("click", handleBackdropClick);
+elements.tagRenameModal.addEventListener("click", handleBackdropClick);
 elements.editForm.addEventListener("submit", handleEditSubmit);
+elements.tagRenameForm.addEventListener("submit", handleTagRenameSubmit);
 elements.searchInput.addEventListener("input", render);
 document.addEventListener("keydown", handleKeydown);
 
@@ -95,7 +111,7 @@ async function handleSubmit(event) {
     return;
   }
 
-  const category = normalizeCategory(elements.categoryInput.value);
+  const category = serializeTags([...state.selectedTags, elements.tagInput.value]);
   const existingUrls = new Set(state.videos.map((video) => video.url));
   const uniqueEntries = entries.filter((entry) => !existingUrls.has(entry.url));
   const duplicateCount = entries.length - uniqueEntries.length;
@@ -128,7 +144,7 @@ async function handleSubmit(event) {
     render();
   } catch (error) {
     elements.form.querySelector("button[type='submit']").disabled = false;
-    setStatus(error.message || "保存失败，请稍后再试。");
+    setStatus(getFriendlyErrorMessage(error, "保存失败，请稍后再试。"));
     return;
   }
 
@@ -544,14 +560,6 @@ function renderFilters() {
   const categories = getCategories();
   if (!categories.includes(state.activeCategory)) state.activeCategory = "all";
 
-  elements.categoryOptions.replaceChildren(
-    ...categories.map((category) => {
-      const option = document.createElement("option");
-      option.value = category;
-      return option;
-    }),
-  );
-
   const filterOptions = ["all", ...categories];
   elements.categoryFilter.replaceChildren(
     ...filterOptions.map((category) => {
@@ -560,22 +568,166 @@ function renderFilters() {
       button.type = "button";
       button.className = "filter-pill";
       button.textContent = category === "all" ? "全部" : category;
+      button.title = category === "all" ? "" : "右键重命名标签";
       button.setAttribute("aria-pressed", String(isActive));
       button.addEventListener("click", () => {
         state.activeCategory = category;
         render();
       });
+      if (category !== "all") {
+        button.addEventListener("contextmenu", (event) => {
+          event.preventDefault();
+          openTagRenameModal(category);
+        });
+      }
       return button;
     }),
   );
+
+  renderTagPicker("add");
+  if (!elements.editModal.hidden) renderTagPicker("edit");
+}
+
+function renderTagPicker(mode) {
+  const picker = mode === "edit" ? elements.editTagPicker : elements.tagPicker;
+  const selectedTags = mode === "edit" ? state.editingTags : state.selectedTags;
+  const availableTags = uniqueTags([...selectedTags, ...getCategories()]).filter((tag) => tag !== "未分类");
+
+  picker.replaceChildren();
+
+  if (!availableTags.length) {
+    const empty = document.createElement("span");
+    empty.className = "tag-picker-empty";
+    empty.textContent = "还没有标签";
+    picker.append(empty);
+    return;
+  }
+
+  availableTags.forEach((tag) => {
+    const button = document.createElement("button");
+    const isSelected = selectedTags.includes(tag);
+    button.type = "button";
+    button.className = "tag-option";
+    button.dataset.tag = tag;
+    button.title = "右键重命名标签";
+    button.setAttribute("aria-pressed", String(isSelected));
+    button.append(document.createTextNode(tag));
+    if (isSelected) {
+      const remove = document.createElement("span");
+      remove.className = "tag-remove";
+      remove.textContent = "×";
+      remove.setAttribute("aria-hidden", "true");
+      button.append(remove);
+    }
+    button.addEventListener("click", () => toggleSelectedTag(mode, tag));
+    button.addEventListener("contextmenu", (event) => {
+      event.preventDefault();
+      openTagRenameModal(tag);
+    });
+    picker.append(button);
+  });
+}
+
+function toggleSelectedTag(mode, tag) {
+  const selectedTags = mode === "edit" ? state.editingTags : state.selectedTags;
+  if (selectedTags.includes(tag)) {
+    selectedTags.splice(selectedTags.indexOf(tag), 1);
+  } else if (selectedTags.length < 3) {
+    selectedTags.push(tag);
+  } else {
+    window.alert("一个视频最多选择 3 个标签。");
+  }
+  renderTagPicker(mode);
+}
+
+function addTypedTag(mode) {
+  const input = mode === "edit" ? elements.editTagInput : elements.tagInput;
+  const tag = normalizeTag(input.value);
+  if (!tag) return;
+  const selectedTags = mode === "edit" ? state.editingTags : state.selectedTags;
+  if (!selectedTags.includes(tag)) {
+    if (selectedTags.length >= 3) {
+      window.alert("一个视频最多选择 3 个标签。");
+      return;
+    }
+    selectedTags.push(tag);
+  }
+  input.value = "";
+  render();
+}
+
+function handleTagInputKeydown(event, mode) {
+  if (event.key !== "Enter") return;
+  event.preventDefault();
+  addTypedTag(mode);
+}
+
+function openTagRenameModal(tag) {
+  if (tag === "未分类") return;
+  state.renamingTag = tag;
+  elements.tagRenameInput.value = tag;
+  setTagRenameStatus("");
+  elements.tagRenameModal.hidden = false;
+  window.setTimeout(() => elements.tagRenameInput.focus(), 0);
+}
+
+function closeTagRenameModal() {
+  state.renamingTag = "";
+  elements.tagRenameModal.hidden = true;
+  elements.tagRenameForm.reset();
+  setTagRenameStatus("");
+}
+
+async function handleTagRenameSubmit(event) {
+  event.preventDefault();
+  const oldTag = state.renamingTag;
+  const nextTag = normalizeTag(elements.tagRenameInput.value);
+  if (!nextTag || nextTag === oldTag) return;
+
+  const affectedVideos = state.videos.filter((video) => getVideoTags(video).includes(oldTag));
+  if (!affectedVideos.length) {
+    closeTagRenameModal();
+    return;
+  }
+
+  elements.tagRenameForm.querySelector("button[type='submit']").disabled = true;
+  setTagRenameStatus("正在保存...");
+  const previousCategories = new Map(affectedVideos.map((video) => [video.id, video.category]));
+  affectedVideos.forEach((video) => {
+    video.category = serializeTags(getVideoTags(video).map((tag) => (tag === oldTag ? nextTag : tag)));
+  });
+
+  state.selectedTags = state.selectedTags.map((tag) => (tag === oldTag ? nextTag : tag));
+  state.editingTags = state.editingTags.map((tag) => (tag === oldTag ? nextTag : tag));
+  if (state.activeCategory === oldTag) state.activeCategory = nextTag;
+  saveVideos();
+  render();
+
+  try {
+    await Promise.all(affectedVideos.map((video) => updatePersistedVideo(video.id, { category: video.category })));
+    closeTagRenameModal();
+  } catch (error) {
+    affectedVideos.forEach((video) => {
+      video.category = previousCategories.get(video.id) || video.category;
+    });
+    state.selectedTags = state.selectedTags.map((tag) => (tag === nextTag ? oldTag : tag));
+    state.editingTags = state.editingTags.map((tag) => (tag === nextTag ? oldTag : tag));
+    if (state.activeCategory === nextTag) state.activeCategory = oldTag;
+    saveVideos();
+    render();
+    setTagRenameStatus(getFriendlyErrorMessage(error, "标签重命名失败，请稍后再试。"));
+  } finally {
+    elements.tagRenameForm.querySelector("button[type='submit']").disabled = false;
+  }
 }
 
 function renderCards() {
   const query = elements.searchInput.value.trim().toLowerCase();
   const filter = state.activeCategory;
   const videos = state.videos.filter((video) => {
-    const matchesFilter = filter === "all" || video.category === filter;
-    const haystack = `${video.title} ${video.category} ${getDisplaySource(video)}`.toLowerCase();
+    const tags = getVideoTags(video);
+    const matchesFilter = filter === "all" || tags.includes(filter);
+    const haystack = `${video.title} ${tags.join(" ")} ${getDisplaySource(video)}`.toLowerCase();
     return matchesFilter && haystack.includes(query);
   });
 
@@ -593,7 +745,7 @@ function renderCards() {
     thumbnail.alt = `${video.title} 的封面`;
     card.querySelector(".source-label").textContent = getDisplaySource(video);
     card.querySelector("h3").textContent = video.title;
-    card.querySelector(".category-pill").textContent = video.category;
+    renderCardTags(card, video);
     thumbnailButton.addEventListener("click", () => playVideo(video));
     editButton.addEventListener("click", (event) => {
       event.stopPropagation();
@@ -607,6 +759,20 @@ function renderCards() {
   });
 }
 
+function renderCardTags(card, video) {
+  const actions = card.querySelector(".card-actions");
+  const editButton = card.querySelector(".edit-button");
+  const tags = getVideoTags(video);
+
+  actions.querySelectorAll(".category-pill").forEach((pill) => pill.remove());
+  tags.forEach((tag) => {
+    const pill = document.createElement("span");
+    pill.className = "category-pill";
+    pill.textContent = tag;
+    actions.insertBefore(pill, editButton);
+  });
+}
+
 function playVideo(video) {
   if (isExternalEntry(video)) {
     window.open(video.embedUrl || video.url, "_blank", "noopener");
@@ -615,7 +781,7 @@ function playVideo(video) {
 
   state.activeId = video.id;
   elements.playerModal.hidden = false;
-  elements.playerSource.textContent = `${video.source} · ${video.category}`;
+  elements.playerSource.textContent = `${getDisplaySource(video)} · ${getVideoTags(video).join(" / ")}`;
   elements.playerTitle.textContent = video.title;
   elements.playerFrame.replaceChildren();
 
@@ -662,7 +828,7 @@ function deleteVideo(id) {
       render();
     })
     .catch((error) => {
-      window.alert(error.message || "删除失败，请稍后再试。");
+      window.alert(getFriendlyErrorMessage(error, "删除失败，请稍后再试。"));
     });
 }
 
@@ -674,7 +840,7 @@ async function handleEditSubmit(event) {
 
   const updates = {
     title: elements.editTitleInput.value.trim() || video.title,
-    category: normalizeCategory(elements.editCategoryInput.value),
+    category: serializeTags([...state.editingTags, elements.editTagInput.value]),
   };
 
   elements.editForm.querySelector("button[type='submit']").disabled = true;
@@ -687,10 +853,18 @@ async function handleEditSubmit(event) {
     render();
     closeEditModal();
   } catch (error) {
-    setEditStatus(error.message || "保存失败，请稍后再试。");
+    setEditStatus(getFriendlyErrorMessage(error, "保存失败，请稍后再试。"));
   } finally {
     elements.editForm.querySelector("button[type='submit']").disabled = false;
   }
+}
+
+function getFriendlyErrorMessage(error, fallback) {
+  const message = error?.message || "";
+  if (/load failed|failed to fetch|network/i.test(message)) {
+    return "网络请求失败，请检查网络后再试。";
+  }
+  return message || fallback;
 }
 
 async function loadRemoteVideos() {
@@ -817,11 +991,38 @@ async function migrateLocalVideos(localVideos) {
 }
 
 function getCategories() {
-  return [...new Set(state.videos.map((video) => video.category))].sort((a, b) => a.localeCompare(b, "zh-Hans-CN"));
+  return [...new Set(state.videos.flatMap(getVideoTags))].sort((a, b) => a.localeCompare(b, "zh-Hans-CN"));
 }
 
-function normalizeCategory(category) {
-  return category.trim() || "未分类";
+function getVideoTags(video) {
+  return parseTags(video.category);
+}
+
+function parseTags(value) {
+  const tags = String(value || "")
+    .split(/[｜|,，、]/)
+    .map(normalizeTag)
+    .filter(Boolean);
+  return uniqueTags(tags).slice(0, 3);
+}
+
+function normalizeTag(tag) {
+  return String(tag || "").trim().replace(/\s+/g, " ").slice(0, 16);
+}
+
+function uniqueTags(tags) {
+  const seen = new Set();
+  return tags.filter((tag) => {
+    const key = tag.toLowerCase();
+    if (!tag || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function serializeTags(tags) {
+  const normalizedTags = uniqueTags(tags.map(normalizeTag)).slice(0, 3);
+  return normalizedTags.length ? normalizedTags.join("｜") : "未分类";
 }
 
 function createVideo(entry, metadata, category) {
@@ -894,6 +1095,7 @@ function fallbackTitle(url, source) {
 
 function openAddModal() {
   elements.addModal.hidden = false;
+  renderTagPicker("add");
   setStatus("");
   window.setTimeout(() => elements.urlsInput.focus(), 0);
 }
@@ -910,8 +1112,10 @@ function closePlayerModal() {
 
 function openEditModal(video) {
   state.editingId = video.id;
+  state.editingTags = getVideoTags(video);
   elements.editTitleInput.value = video.title;
-  elements.editCategoryInput.value = video.category;
+  elements.editTagInput.value = "";
+  renderTagPicker("edit");
   setEditStatus("");
   elements.editModal.hidden = false;
   window.setTimeout(() => elements.editTitleInput.focus(), 0);
@@ -919,6 +1123,7 @@ function openEditModal(video) {
 
 function closeEditModal() {
   state.editingId = null;
+  state.editingTags = [];
   elements.editModal.hidden = true;
   elements.editForm.reset();
   setEditStatus("");
@@ -928,17 +1133,21 @@ function handleBackdropClick(event) {
   if (event.target === elements.addModal) closeAddModal();
   if (event.target === elements.playerModal) closePlayerModal();
   if (event.target === elements.editModal) closeEditModal();
+  if (event.target === elements.tagRenameModal) closeTagRenameModal();
 }
 
 function handleKeydown(event) {
   if (event.key !== "Escape") return;
   if (!elements.playerModal.hidden) closePlayerModal();
   if (!elements.editModal.hidden) closeEditModal();
+  if (!elements.tagRenameModal.hidden) closeTagRenameModal();
   if (!elements.addModal.hidden) closeAddModal();
 }
 
 function clearForm(shouldFocus = true) {
   elements.form.reset();
+  state.selectedTags = [];
+  renderTagPicker("add");
   setStatus("");
   if (shouldFocus) elements.urlsInput.focus();
 }
@@ -949,6 +1158,10 @@ function setStatus(message) {
 
 function setEditStatus(message) {
   elements.editStatusLine.textContent = message;
+}
+
+function setTagRenameStatus(message) {
+  elements.tagRenameStatusLine.textContent = message;
 }
 
 function loadVideos() {

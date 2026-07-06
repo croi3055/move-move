@@ -20,7 +20,7 @@
     <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
     <link rel="icon" type="image/png" href="/assets/favicon.png" />
     <link rel="apple-touch-icon" href="/assets/favicon.png" />
-    <link rel="stylesheet" href="./style.css?v=15" />
+    <link rel="stylesheet" href="./style.css?v=18" />
   </head>
   <body>
     <main class="app-shell">
@@ -75,11 +75,15 @@
             <textarea id="urlsInput" placeholder="每行一个链接，可以一次贴很多个" autocomplete="off" required></textarea>
           </label>
 
-          <label class="input-group">
-            <span>分类</span>
-            <input id="categoryInput" type="text" list="categoryOptions" placeholder="例如：力量、拉伸、瑜伽" />
-            <datalist id="categoryOptions"></datalist>
-          </label>
+          <div class="input-group">
+            <span>标签</span>
+            <div class="tag-picker" id="tagPicker" aria-label="选择标签"></div>
+            <div class="tag-add-row">
+              <input id="tagInput" type="text" placeholder="添加新标签" />
+              <button class="secondary-button tag-add-button" type="button" id="addTagButton">添加</button>
+            </div>
+            <p class="field-hint">最多选择 3 个标签</p>
+          </div>
 
           <div class="modal-actions">
             <p class="status-line" id="statusLine" role="status"></p>
@@ -121,14 +125,35 @@
             <input id="editTitleInput" type="text" required />
           </label>
 
-          <label class="input-group">
-            <span>分类</span>
-            <input id="editCategoryInput" type="text" list="categoryOptions" placeholder="例如：力量、拉伸、瑜伽" />
-          </label>
+          <div class="input-group">
+            <span>标签</span>
+            <div class="tag-picker" id="editTagPicker" aria-label="选择标签"></div>
+            <div class="tag-add-row">
+              <input id="editTagInput" type="text" placeholder="添加新标签" />
+              <button class="secondary-button tag-add-button" type="button" id="editAddTagButton">添加</button>
+            </div>
+            <p class="field-hint">最多选择 3 个标签</p>
+          </div>
 
           <div class="modal-actions">
             <p class="status-line" id="editStatusLine" role="status"></p>
             <button class="primary-button" type="submit">保存修改</button>
+          </div>
+        </form>
+      </section>
+    </div>
+
+    <div class="modal-backdrop" id="tagRenameModal" hidden>
+      <section class="modal-panel rename-modal" role="dialog" aria-modal="true" aria-labelledby="tagRenameTitle">
+        <h2 id="tagRenameTitle">修改标签名称</h2>
+        <form id="tagRenameForm" class="video-form">
+          <label class="input-group">
+            <input id="tagRenameInput" type="text" required />
+          </label>
+
+          <div class="modal-actions">
+            <p class="status-line" id="tagRenameStatusLine" role="status"></p>
+            <button class="primary-button" type="submit">保存</button>
           </div>
         </form>
       </section>
@@ -154,6 +179,6 @@
       </article>
     </template>
 
-    <script src="./script.js?v=19"></script>
+    <script src="./script.js?v=22"></script>
   </body>
 </html>
