@@ -70,10 +70,7 @@ elements.editTagInput.addEventListener("keydown", (event) => handleTagInputKeydo
 elements.closeAddButton.addEventListener("click", closeAddModal);
 elements.closePlayerButton.addEventListener("click", closePlayerModal);
 elements.closeEditButton.addEventListener("click", closeEditModal);
-elements.addModal.addEventListener("click", handleBackdropClick);
 elements.playerModal.addEventListener("click", handleBackdropClick);
-elements.editModal.addEventListener("click", handleBackdropClick);
-elements.tagRenameModal.addEventListener("click", handleBackdropClick);
 elements.editForm.addEventListener("submit", handleEditSubmit);
 elements.tagRenameForm.addEventListener("submit", handleTagRenameSubmit);
 elements.cancelTagRenameButton.addEventListener("click", closeTagRenameModal);
@@ -592,6 +589,7 @@ function renderFilters() {
 
 function renderTagPicker(mode) {
   const picker = mode === "edit" ? elements.editTagPicker : elements.tagPicker;
+  replaceSelectedTags(mode, getRealTags(mode === "edit" ? state.editingTags : state.selectedTags));
   const selectedTags = mode === "edit" ? state.editingTags : state.selectedTags;
   const availableTags = uniqueTags([...selectedTags, ...getCategories()]).filter((tag) => tag !== "未分类");
 
@@ -631,6 +629,7 @@ function renderTagPicker(mode) {
 }
 
 function toggleSelectedTag(mode, tag) {
+  replaceSelectedTags(mode, getRealTags(mode === "edit" ? state.editingTags : state.selectedTags));
   const selectedTags = mode === "edit" ? state.editingTags : state.selectedTags;
   if (selectedTags.includes(tag)) {
     selectedTags.splice(selectedTags.indexOf(tag), 1);
@@ -646,6 +645,7 @@ function addTypedTag(mode) {
   const input = mode === "edit" ? elements.editTagInput : elements.tagInput;
   const tag = normalizeTag(input.value);
   if (!tag) return;
+  replaceSelectedTags(mode, getRealTags(mode === "edit" ? state.editingTags : state.selectedTags));
   const selectedTags = mode === "edit" ? state.editingTags : state.selectedTags;
   if (!selectedTags.includes(tag)) {
     if (selectedTags.length >= 3) {
@@ -993,7 +993,12 @@ async function migrateLocalVideos(localVideos) {
 }
 
 function getCategories() {
-  return [...new Set(state.videos.flatMap(getVideoTags))].sort((a, b) => a.localeCompare(b, "zh-Hans-CN"));
+  const categories = [...new Set(state.videos.flatMap(getVideoTags))];
+  return categories.sort((a, b) => {
+    if (a === "未分类") return 1;
+    if (b === "未分类") return -1;
+    return a.localeCompare(b, "zh-Hans-CN");
+  });
 }
 
 function getVideoTags(video) {
@@ -1005,7 +1010,7 @@ function parseTags(value) {
     .split(/[｜|,，、]/)
     .map(normalizeTag)
     .filter(Boolean);
-  return uniqueTags(tags).slice(0, 3);
+  return sanitizeTags(tags);
 }
 
 function normalizeTag(tag) {
@@ -1022,8 +1027,29 @@ function uniqueTags(tags) {
   });
 }
 
+function sanitizeTags(tags) {
+  const unique = uniqueTags(tags.map(normalizeTag)).slice(0, 3);
+  const realTags = unique.filter((tag) => tag !== "未分类");
+  return realTags.length ? realTags : ["未分类"];
+}
+
+function getRealTags(tags) {
+  return uniqueTags(tags.map(normalizeTag))
+    .filter((tag) => tag !== "未分类")
+    .slice(0, 3);
+}
+
+function replaceSelectedTags(mode, tags) {
+  const normalizedTags = getRealTags(tags);
+  if (mode === "edit") {
+    state.editingTags = normalizedTags;
+  } else {
+    state.selectedTags = normalizedTags;
+  }
+}
+
 function serializeTags(tags) {
-  const normalizedTags = uniqueTags(tags.map(normalizeTag)).slice(0, 3);
+  const normalizedTags = sanitizeTags(tags).filter((tag) => tag !== "未分类");
   return normalizedTags.length ? normalizedTags.join("｜") : "未分类";
 }
 
@@ -1114,7 +1140,7 @@ function closePlayerModal() {
 
 function openEditModal(video) {
   state.editingId = video.id;
-  state.editingTags = getVideoTags(video);
+  state.editingTags = getRealTags(getVideoTags(video));
   elements.editTitleInput.value = video.title;
   elements.editTagInput.value = "";
   renderTagPicker("edit");
@@ -1132,10 +1158,7 @@ function closeEditModal() {
 }
 
 function handleBackdropClick(event) {
-  if (event.target === elements.addModal) closeAddModal();
   if (event.target === elements.playerModal) closePlayerModal();
-  if (event.target === elements.editModal) closeEditModal();
-  if (event.target === elements.tagRenameModal) closeTagRenameModal();
 }
 
 function handleKeydown(event) {
