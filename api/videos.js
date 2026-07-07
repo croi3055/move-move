@@ -100,7 +100,12 @@ async function updateVideo(request, response, libraryKey) {
 
   const updates = {};
   if (typeof body.title === "string" && body.title.trim()) updates.title = body.title.trim();
+  if (typeof body.url === "string" && body.url.trim()) updates.url = body.url.trim();
   if (typeof body.category === "string") updates.category = body.category.trim() || "未分类";
+  if (typeof body.thumbnail === "string") updates.thumbnail = body.thumbnail;
+  if (typeof body.source === "string" && body.source.trim()) updates.source = body.source.trim();
+  if (typeof body.embedUrl === "string" && body.embedUrl.trim()) updates.embed_url = body.embedUrl.trim();
+  if (typeof body.kind === "string" && body.kind.trim()) updates.kind = body.kind.trim();
 
   if (!Object.keys(updates).length) {
     response.status(400).json({ error: "No updates provided" });

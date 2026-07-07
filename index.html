@@ -101,7 +101,7 @@
         <div class="modal-header">
           <div>
             <p class="eyebrow" id="playerSource">准备播放</p>
-            <h2 id="playerTitle">选择一个视频</h2>
+            <h2 id="playerTitle"><a id="playerTitleLink" href="#" target="_blank" rel="noopener">选择一个视频</a></h2>
           </div>
           <button class="ghost-button" type="button" id="closePlayerButton" title="关闭" aria-label="关闭播放器">×</button>
         </div>
@@ -123,6 +123,11 @@
           <label class="input-group">
             <span>标题</span>
             <input id="editTitleInput" type="text" required />
+          </label>
+
+          <label class="input-group">
+            <span>视频链接</span>
+            <input id="editUrlInput" type="url" required />
           </label>
 
           <div class="input-group">
@@ -180,6 +185,6 @@
       </article>
     </template>
 
-    <script src="./script.js?v=26"></script>
+    <script src="./script.js?v=27"></script>
   </body>
 </html>

@@ -46,6 +46,7 @@ const elements = {
   closeEditButton: document.querySelector("#closeEditButton"),
   editForm: document.querySelector("#editForm"),
   editTitleInput: document.querySelector("#editTitleInput"),
+  editUrlInput: document.querySelector("#editUrlInput"),
   editStatusLine: document.querySelector("#editStatusLine"),
   tagRenameForm: document.querySelector("#tagRenameForm"),
   tagRenameInput: document.querySelector("#tagRenameInput"),
@@ -53,6 +54,7 @@ const elements = {
   cancelTagRenameButton: document.querySelector("#cancelTagRenameButton"),
   playerSource: document.querySelector("#playerSource"),
   playerTitle: document.querySelector("#playerTitle"),
+  playerTitleLink: document.querySelector("#playerTitleLink"),
   playerFrame: document.querySelector("#playerFrame"),
 };
 
@@ -784,7 +786,8 @@ function playVideo(video) {
   state.activeId = video.id;
   elements.playerModal.hidden = false;
   elements.playerSource.textContent = `${getDisplaySource(video)} · ${getVideoTags(video).join(" / ")}`;
-  elements.playerTitle.textContent = video.title;
+  elements.playerTitleLink.textContent = video.title;
+  elements.playerTitleLink.href = video.url;
   elements.playerFrame.replaceChildren();
 
   if (video.kind === "video") {
@@ -839,16 +842,40 @@ async function handleEditSubmit(event) {
 
   const video = state.videos.find((item) => item.id === state.editingId);
   if (!video) return;
+  const parsedEntries = parseVideoEntries(elements.editUrlInput.value);
+  if (!parsedEntries.length) {
+    setEditStatus("请输入一个有效的视频链接。");
+    return;
+  }
+
+  const nextUrl = parsedEntries[0].url;
+  const isUrlChanged = nextUrl !== video.url;
+  const duplicate = state.videos.find((item) => item.id !== video.id && item.url === nextUrl);
+  if (duplicate) {
+    setEditStatus("这个链接已经在画廊里了。");
+    return;
+  }
 
   const updates = {
     title: elements.editTitleInput.value.trim() || video.title,
+    url: nextUrl,
     category: serializeTags([...state.editingTags, elements.editTagInput.value]),
   };
 
   elements.editForm.querySelector("button[type='submit']").disabled = true;
-  setEditStatus("正在保存...");
+  setEditStatus(isUrlChanged ? "正在重新整理视频链接..." : "正在保存...");
 
   try {
+    if (isUrlChanged) {
+      const metadata = await getVideoMetadata(nextUrl);
+      Object.assign(updates, {
+        thumbnail: metadata.thumbnail || makeFallbackThumbnail(updates.title, metadata.source),
+        source: metadata.source,
+        embedUrl: metadata.embedUrl,
+        kind: metadata.kind,
+      });
+      setEditStatus("正在保存...");
+    }
     const updatedVideo = await updatePersistedVideo(video.id, updates);
     Object.assign(video, updatedVideo || updates);
     saveVideos();
@@ -1142,6 +1169,7 @@ function openEditModal(video) {
   state.editingId = video.id;
   state.editingTags = getRealTags(getVideoTags(video));
   elements.editTitleInput.value = video.title;
+  elements.editUrlInput.value = video.url;
   elements.editTagInput.value = "";
   renderTagPicker("edit");
   setEditStatus("");
