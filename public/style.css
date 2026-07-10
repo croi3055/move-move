@@ -167,6 +167,17 @@ h3 {
   -webkit-line-clamp: 2;
 }
 
+.card-title-link {
+  color: inherit;
+  text-decoration: none;
+  text-underline-offset: 3px;
+}
+
+.card-title-link:hover,
+.card-title-link:focus-visible {
+  text-decoration: underline;
+}
+
 .library-panel {
   padding: 0;
 }

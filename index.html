@@ -20,7 +20,7 @@
     <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
     <link rel="icon" type="image/png" href="/assets/favicon.png" />
     <link rel="apple-touch-icon" href="/assets/favicon.png" />
-    <link rel="stylesheet" href="./style.css?v=21" />
+    <link rel="stylesheet" href="./style.css?v=22" />
   </head>
   <body>
     <main class="app-shell">
@@ -96,7 +96,7 @@
       </section>
     </div>
 
-    <div class="modal-backdrop player-backdrop" id="playerModal" hidden>
+    <div class="modal-backdrop player-backdrop" id="playerModal" tabindex="-1" hidden>
       <section class="modal-panel player-modal" role="dialog" aria-modal="true" aria-labelledby="playerTitle">
         <div class="modal-header">
           <div>
@@ -174,7 +174,7 @@
         <div class="card-body">
           <div>
             <p class="source-label"></p>
-            <h3></h3>
+            <h3><a class="card-title-link" href="#" target="_blank" rel="noopener"></a></h3>
           </div>
           <div class="card-actions">
             <span class="category-pill"></span>
@@ -185,6 +185,6 @@
       </article>
     </template>
 
-    <script src="./script.js?v=27"></script>
+    <script src="./script.js?v=31"></script>
   </body>
 </html>

@@ -742,13 +742,15 @@ function renderCards() {
     const card = elements.template.content.firstElementChild.cloneNode(true);
     const thumbnailButton = card.querySelector(".thumbnail-button");
     const thumbnail = card.querySelector("img");
+    const titleLink = card.querySelector(".card-title-link");
     const editButton = card.querySelector(".edit-button");
     const deleteButton = card.querySelector(".delete-button");
 
     thumbnail.src = getThumbnailSrc(video);
     thumbnail.alt = `${video.title} 的封面`;
     card.querySelector(".source-label").textContent = getDisplaySource(video);
-    card.querySelector("h3").textContent = video.title;
+    titleLink.textContent = video.title;
+    titleLink.href = video.url;
     renderCardTags(card, video);
     thumbnailButton.addEventListener("click", () => playVideo(video));
     editButton.addEventListener("click", (event) => {
@@ -804,8 +806,10 @@ function playVideo(video) {
     player.title = video.title;
     player.allow = "autoplay; accelerometer; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share";
     player.allowFullscreen = true;
+    player.tabIndex = 0;
     elements.playerFrame.append(player);
   }
+  window.setTimeout(() => elements.playerModal.focus(), 0);
 }
 
 function getDisplaySource(video) {
@@ -1190,11 +1194,41 @@ function handleBackdropClick(event) {
 }
 
 function handleKeydown(event) {
-  if (event.key !== "Escape") return;
-  if (!elements.playerModal.hidden) closePlayerModal();
-  if (!elements.editModal.hidden) closeEditModal();
-  if (!elements.tagRenameModal.hidden) closeTagRenameModal();
-  if (!elements.addModal.hidden) closeAddModal();
+  if (event.key === "Escape") {
+    if (!elements.playerModal.hidden) closePlayerModal();
+    if (!elements.editModal.hidden) closeEditModal();
+    if (!elements.tagRenameModal.hidden) closeTagRenameModal();
+    if (!elements.addModal.hidden) closeAddModal();
+    return;
+  }
+
+  if (elements.playerModal.hidden || isTypingTarget(event.target)) return;
+  const player = elements.playerFrame.querySelector("video");
+  if (!player) return;
+
+  if (event.code === "Space") {
+    event.preventDefault();
+    if (player.paused) {
+      player.play().catch(() => {});
+    } else {
+      player.pause();
+    }
+  }
+
+  if (event.key.toLowerCase() === "m") {
+    event.preventDefault();
+    player.muted = !player.muted;
+  }
+
+  if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
+    event.preventDefault();
+    const delta = event.key === "ArrowLeft" ? -5 : 5;
+    player.currentTime = Math.min(Math.max(player.currentTime + delta, 0), player.duration || player.currentTime + delta);
+  }
+}
+
+function isTypingTarget(target) {
+  return target?.closest?.("input, textarea, select, button, a, [contenteditable='true']");
 }
 
 function clearForm(shouldFocus = true) {
