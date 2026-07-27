@@ -15,6 +15,7 @@ const state = {
   renamingTag: "",
   storageMode: "local",
   writeToken: localStorage.getItem("exercise-video-library:write-token") || "",
+  lastRemoteRefreshAt: 0,
 };
 
 const elements = {
@@ -78,6 +79,9 @@ elements.tagRenameForm.addEventListener("submit", handleTagRenameSubmit);
 elements.cancelTagRenameButton.addEventListener("click", closeTagRenameModal);
 elements.searchInput.addEventListener("input", render);
 document.addEventListener("keydown", handleKeydown);
+document.addEventListener("visibilitychange", refreshRemoteVideosWhenVisible);
+window.addEventListener("focus", refreshRemoteVideosWhenVisible);
+window.addEventListener("pageshow", refreshRemoteVideosWhenVisible);
 
 initializeApp();
 
@@ -903,9 +907,10 @@ function getFriendlyErrorMessage(error, fallback) {
 async function loadRemoteVideos() {
   try {
     const localVideos = loadVideos();
-    const response = await fetch(videosApiUrl());
+    const response = await fetch(videosApiUrl({ _: Date.now() }), { cache: "no-store" });
     if (!response.ok) throw new Error("remote unavailable");
     const videos = await response.json();
+    state.lastRemoteRefreshAt = Date.now();
     state.storageMode = "remote";
     state.videos = videos.length ? videos : localVideos;
     saveVideos();
@@ -916,6 +921,12 @@ async function loadRemoteVideos() {
   } catch {
     state.storageMode = "local";
   }
+}
+
+function refreshRemoteVideosWhenVisible() {
+  if (document.visibilityState === "hidden") return;
+  if (Date.now() - state.lastRemoteRefreshAt < 3000) return;
+  loadRemoteVideos();
 }
 
 async function persistVideos(videos) {
