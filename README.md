@@ -1,118 +1,137 @@
-# 运动跟练视频库
+# 动一动
 
-一个私人运动视频画廊。支持批量粘贴视频链接、B 站标题/封面解析、当前页面播放、编辑标题和分类，并可通过 Supabase 在电脑和 iPad 间同步。也支持用 library key 分开多个视频库。
+通过分享链接，汇总你分散在不同平台的跟练视频，点击播放，并支持分类与搜索。
 
-## 本地预览
+## Why I Built This
+
+我收藏的跟练视频散落在不同平台。每次想运动，都要先打开App、翻收藏夹、筛选找到对应视频，这些步骤极大地增加了开始运动的阻力。
+
+于是有了这个网页：添加链接，解析封面与标题，以画廊的形式呈现，把常用的视频放在同一个页面里，按标签找到今天想练的部位，点开就开始。它是我日常使用的个人工具，不是提供账号体系和内容托管的商业服务。
+
+## Features
+
+- 批量粘贴链接，也能识别分享文字中的标题，标题可手动修改。
+- 尝试获取 Bilibili、YouTube 和 Vimeo 的标题、封面；无法获取时用标题占位。
+- 标签平铺筛选、标题和分类搜索；每个视频最多选择三个标签，支持修改和删除标签。
+- 点击封面在页面内播放支持嵌入的视频，点击标题打开原地址；小红书和小鹅通跳转原网页。
+- 编辑视频标题、链接和标签，删除收藏，导入/导出 JSON 视频库备份，复制当前页面地址。
+- 默认使用浏览器本地存储；自行部署后，可通过 Supabase 跨设备同步。
+
+这是一个供个人使用和自行部署的工具，不提供多人视频库托管。打开别人部署的页面，也可以在自己的浏览器中收藏视频；需要跨设备同步时，请部署自己的实例。
+
+## Screenshots
+
+暂未提交适合公开展示的截图。计划补充桌面画廊、手机双列画廊和添加视频窗口的截图；上传前会使用演示数据，并遮去个人收藏和密钥。
+
+## Tech Stack
+
+原生 HTML、CSS、JavaScript；Node.js 本地服务器；Vercel 静态托管与 Serverless Functions；Supabase PostgreSQL。
+
+没有前端框架，也没有 npm 运行时依赖。界面参考 Animal Island UI 的视觉风格，未直接安装 React 组件库。
+
+## Getting Started
+
+使用 Node.js 22 或更新的受支持版本及 npm，在项目根目录运行：
 
 ```bash
 npm run dev
 ```
 
-打开：
+打开 [http://127.0.0.1:4173/](http://127.0.0.1:4173/)。端口可通过 `PORT` 环境变量覆盖。
 
-```txt
-http://127.0.0.1:4173/
-```
+页面默认使用当前浏览器的 localStorage，不读取部署者的云端收藏。清除网站数据、换浏览器或换设备不会保留这份本地收藏，建议定期导出 JSON 备份。请通过本地服务器打开，而不是双击 HTML 文件，以便使用 `/api/*` 元数据接口和图标资源。
 
-如果还没配置 Supabase，页面会使用浏览器本地缓存。
+页脚「导出」下载版本化 JSON 文件，包含标题、链接、标签和封面地址，不包含同步密钥。通过「导入」恢复到当前本地或已连接的云端收藏：确认后只追加新链接，跳过重复项，不覆盖已有视频。导入上限为 5 MB、2000 条。旧版 TXT 可继续粘贴到批量添加窗口，但不包含标签。
 
-## Supabase 设置
+浏览器存储不可用、已满或损坏时会显示提醒；此时页面内的新改动可能仅留在内存中，请在关闭或刷新前导出。损坏的原始存储不会被自动覆盖。
 
-1. 在 Supabase 创建项目。
-2. 打开项目里的 `SQL Editor`。
-3. 运行：
-
-```sql
--- 复制 supabase/schema.sql 的内容运行
-```
-
-4. 到 `Project Settings` -> `API Keys` 复制：
-   - `SUPABASE_URL`
-   - `SUPABASE_SERVICE_ROLE_KEY`
-
-如果你已经创建过旧版 `videos` 表，也可以重新运行 `supabase/schema.sql`。它会给旧数据补上 `library_key = 'default'`，并把唯一限制改成“同一个库内链接不重复”。
-
-## 本地环境变量
-
-复制 `.env.example` 为 `.env`，填入：
-
-```txt
-SUPABASE_URL=https://your-project-ref.supabase.co
-SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
-APP_WRITE_TOKEN=choose-a-private-password
-```
-
-当前 `server.mjs` 直接读取环境变量。可以这样启动：
+检查和构建：
 
 ```bash
-SUPABASE_URL="..." SUPABASE_SERVICE_ROLE_KEY="..." APP_WRITE_TOKEN="..." npm run dev
+npm run check
+npm run build
+node --test tests/*.test.mjs
 ```
 
-## GitHub
+构建命令将根目录的 `index.html`、`style.css`、`script.js` 复制到 `public/`。修改根目录源文件后执行构建，不要独立编辑这三个副本。`public/` 中的图标是原始资源，不能一起删除。
 
-1. 在 GitHub 新建一个空仓库。
-2. 在本地项目目录运行：
+## Configuration & Deployment
+
+### 环境变量
+
+复制 `.env.example` 为 `.env`，在本机填写，勿提交真实值：
+
+| 变量 | 用途 |
+| --- | --- |
+| `SUPABASE_URL` | 自己的 Supabase 项目 URL |
+| `SUPABASE_SERVICE_ROLE_KEY` | 服务端数据库凭据；不要填入前端代码，publishable/anon key 不具备当前服务端实现所需的权限 |
+| `APP_WRITE_TOKEN` | 自部署实例的同步密钥，使用随机长字符串；云端读写都需要它，未配置或仅为空白时云端接口不可用 |
+
+`npm run dev` 本身不会自动读取 `.env`。配置后用 Node 的环境文件参数启动：
 
 ```bash
-git add .
-git commit -m "Initial workout video library"
-git branch -M main
-git remote add origin https://github.com/YOUR_NAME/YOUR_REPO.git
-git push -u origin main
+node --env-file=.env server.mjs
 ```
 
-## Vercel 部署
+也可以由终端或运行平台注入环境变量。不要把真实密钥写进命令示例、截图或 README。[Node 环境文件说明](https://nodejs.org/download/release/latest-jod/docs/api/cli.html#--env-filefile)。
 
-1. 打开 Vercel。
-2. `Add New Project`。
-3. 选择刚才的 GitHub 仓库。
-4. Framework Preset 选择默认或 Other。
-5. Build Command 留空。
-6. Output Directory 留空。
-7. 在 `Settings` -> `Environment Variables` 添加：
+### Supabase
 
-```txt
-SUPABASE_URL
-SUPABASE_SERVICE_ROLE_KEY
-APP_WRITE_TOKEN
+1. 为自己的部署创建 Supabase 项目，在 SQL Editor 中运行 [supabase/schema.sql](supabase/schema.sql)。
+2. 在项目设置中获取项目 URL 和服务端凭据，配置上述环境变量。
+3. SQL 会启用 RLS，不创建公开 anon 读写策略。浏览器只请求本项目 API，API 用服务端凭据访问数据库，所以应用层权限检查仍然必不可少。
+
+已有旧版 `videos` 表时，脚本会补充 `library_key`（默认值 `default`），并把 URL 唯一约束改成同一个库内唯一。已有数据请先备份并核对约束，再执行；不要把部署教程当作自动迁移。
+
+### Vercel
+
+为自己的部署导入 GitHub 仓库，Framework Preset 选择 `Other`，构建命令使用 `npm run build`，输出目录使用 `public`。在 Environment Variables 中添加上述三个变量，并在适当的环境范围配置后部署。
+
+`api/videos.js` 和 `api/bilibili.js` 是根目录 API Functions，不要复制进静态资源目录。`vercel.json` 保留 `/` 到 `/index.html` 的映射及 filesystem 路由。
+
+旧部署教程曾让构建命令和输出目录留空。仓库保留了已生成的 `public/` 文件，因此这种配置也可能正常工作；现有站点请先核对控制台设置，不必直接改动。这里列出的明确配置用于新部署，依据 [Vercel 构建说明](https://vercel.com/docs/builds/configure-a-build)。
+
+### 自定义域名
+
+在 Vercel 项目的 Domains 中添加域名，然后在域名服务商的 DNS 设置中，按该项目显示的类型、名称和值添加记录。只绑定子域名时不要修改主域名已有的博客或邮件记录，也不要照抄旧教程中的固定 IP 或 CNAME 值。
+
+自部署时还需将 `index.html` 中的 Open Graph URL 和图片 URL 改为自己的域名，再运行构建。
+
+### 可选的跨设备同步
+
+完成自己的 Supabase 和 Vercel 配置后，在页脚打开「同步设置」，输入自己部署时设置的 `APP_WRITE_TOKEN`。在其他设备上打开自己的域名并输入同一密钥，即可访问自己的云端收藏。
+
+- 云端读取、添加、编辑和删除都需要密钥；分享页面地址不会分享云端数据或密钥。
+- 连接后显示云端收藏。检测到同一浏览器、同一网址的本地收藏时，会提示「暂不导入 / 导入云端」；确认后去重追加，不覆盖云端已有视频，也不删除本地收藏。不同网址或设备的收藏仍需通过 JSON 导出、导入搬运。
+- 「断开同步」会清除当前浏览器保存的密钥并恢复本地收藏，不删除云端数据。
+- 已连接但网络不可用时，可以查看已有缓存，修改会被暂停；恢复连接后再操作，或断开后使用独立的本地收藏。
+- 密钥保存在当前浏览器 localStorage 中，只有部署者应持有；不要在共享设备上保持连接。它不是正式的用户账号体系。
+
+旧版库切换及 `?library=...` 分享方式已停用。已有数据库不需要迁移：个人云端仍使用原有 `default` 记录；旧的其他库数据没有被删除，但不再由当前 API 提供访问。旧浏览器缓存也不会被清除或自动并入访客收藏。
+
+公开源码不会开放个人云端收藏。公开前请查看 [安全检查与待确认项](docs/security-review.md)。
+
+## Project Status
+
+核心功能已完成，正在个人日常使用中，后续以小范围维护和 UI 调整为主。项目由 AI 辅助开发，尚未作为公开多用户服务进行完整安全加固。
+
+## Limitations
+
+- 第三方元数据可能因反爬、网络或页面变化失败；B 站短链接没有展开解析，优先使用含 BV 号的完整链接。
+- 嵌入播放受平台登录、清晰度、自动播放和跨域政策限制；不下载或托管原视频，也不绕过付费或登录限制。
+- 空格、M、左右方向键的代码控制针对原生视频，无法保证控制第三方 iframe。Esc 可关闭网页播放窗口，但焦点在第三方播放器内时也可能被其截获。
+- 本地收藏不跨设备同步；云端连接失败不会自动切换成可写离线副本，也没有多设备冲突合并机制。
+- 本地服务器与 Vercel API 仍有少量实现差异：本地 PATCH 目前仅处理标题和分类，线上版本还支持链接及播放元数据更新。
+- 已拒绝危险 URL 协议、移除 JSONP；封面代理禁止重定向并限制响应类型、体积和超时。元数据接口有每实例每客户端每分钟 120 次的基础限流，但不能替代部署平台的全局限流和费用告警。仍无正式账号体系，权限限制见安全检查文档。
+
+## Project Structure
+
+```text
+index.html / style.css / script.js  页面源文件
+server.mjs                         本地预览服务器及本地 API
+api/                               Vercel API Functions
+lib/bilibili.js                     B 站元数据抓取与网页备用解析
+public/                            静态输出副本和图标资源
+supabase/schema.sql                表结构与旧版兼容迁移
+docs/security-review.md             公开前安全检查与待办
 ```
-
-8. 重新部署。
-
-## 绑定域名
-
-1. 进入 Vercel 项目。
-2. 打开 `Settings` -> `Domains`。
-3. 添加你的域名，例如：
-
-```txt
-workout.yourdomain.com
-```
-
-4. 按 Vercel 提示去域名 DNS 后台添加记录。
-
-常见子域名记录：
-
-```txt
-Type: CNAME
-Name: workout
-Value: cname.vercel-dns.com
-```
-
-根域名以 Vercel 页面显示为准。
-
-## 使用
-
-- 电脑和 iPad 打开同一个部署域名，会读取同一份 Supabase 视频列表。
-- 默认视频库仍叫 `default`，页面上显示为 `N`。
-- 可以用网址区分不同视频库：
-
-```txt
-https://workout.yourdomain.com/?library=kiokumo
-https://workout.yourdomain.com/?library=friend-a
-```
-
-- 也可以点击页面左上角的库名按钮切换库名。切换后页面会自动更新网址。
-- 如果设置了 `APP_WRITE_TOKEN`，默认库第一次添加、编辑、删除时页面会提示输入写入密钥。
-- 非默认库会把 library key 当作这个库自己的写入暗号。请给朋友一个不容易猜到的库名，例如 `friend-a-8k2m`，不要只用 `friend` 这种太短的名字。
-- 只观看不需要写入密钥。

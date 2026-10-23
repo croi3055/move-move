@@ -1,12 +1,10 @@
 const LEGACY_STORAGE_KEY = "exercise-video-library:v1";
 const STORAGE_PREFIX = "exercise-video-library:v2";
-const LIBRARY_KEY_STORAGE = "exercise-video-library:library-key";
-const DEFAULT_LIBRARY_KEY = "default";
+const LOCAL_STORAGE_KEY = "exercise-video-library:local:v3";
 const BILIBILI_METADATA_PROXY = "/api/bilibili";
 const VIDEOS_API = "/api/videos";
 
 const state = {
-  libraryKey: getInitialLibraryKey(),
   videos: [],
   activeId: null,
   activeCategory: "all",
@@ -14,8 +12,10 @@ const state = {
   editingTags: [],
   renamingTag: "",
   storageMode: "local",
-  writeToken: localStorage.getItem("exercise-video-library:write-token") || "",
+  writeToken: readStoredToken(),
   lastRemoteRefreshAt: 0,
+  syncGeneration: 0,
+  busy: false,
 };
 
 const elements = {
@@ -36,7 +36,18 @@ const elements = {
   videoCount: document.querySelector("#videoCount"),
   exportButton: document.querySelector("#exportButton"),
   copyLibraryLinkButton: document.querySelector("#copyLibraryLinkButton"),
-  libraryButton: document.querySelector("#libraryButton"),
+  syncButton: document.querySelector("#syncButton"),
+  syncModal: document.querySelector("#syncModal"),
+  syncForm: document.querySelector("#syncForm"),
+  syncTokenInput: document.querySelector("#syncTokenInput"),
+  syncStatus: document.querySelector("#syncStatus"),
+  disconnectSyncButton: document.querySelector("#disconnectSyncButton"),
+  cancelSyncButton: document.querySelector("#cancelSyncButton"),
+  connectSyncButton: document.querySelector("#connectSyncButton"),
+  localImportModal: document.querySelector("#localImportModal"),
+  localImportStatus: document.querySelector("#localImportStatus"),
+  skipLocalImportButton: document.querySelector("#skipLocalImportButton"),
+  confirmLocalImportButton: document.querySelector("#confirmLocalImportButton"),
   openAddButton: document.querySelector("#openAddButton"),
   closeAddButton: document.querySelector("#closeAddButton"),
   addModal: document.querySelector("#addModal"),
@@ -63,8 +74,15 @@ state.videos = loadVideos();
 
 elements.form.addEventListener("submit", handleSubmit);
 elements.exportButton.addEventListener("click", exportVideos);
+document.querySelector("#importButton").addEventListener("click", () => document.querySelector("#importFile").click());
+document.querySelector("#importFile").addEventListener("change", importVideos);
 elements.copyLibraryLinkButton.addEventListener("click", copyLibraryLink);
-elements.libraryButton.addEventListener("click", switchLibrary);
+elements.syncButton.addEventListener("click", openSyncSettings);
+elements.syncForm.addEventListener("submit", connectSync);
+elements.cancelSyncButton.addEventListener("click", closeSyncSettings);
+elements.disconnectSyncButton.addEventListener("click", disconnectSync);
+elements.skipLocalImportButton.addEventListener("click", closeLocalImport);
+elements.confirmLocalImportButton.addEventListener("click", importLocalToCloud);
 elements.openAddButton.addEventListener("click", openAddModal);
 elements.addTagButton.addEventListener("click", () => addTypedTag("add"));
 elements.editAddTagButton.addEventListener("click", () => addTypedTag("edit"));
@@ -86,22 +104,10 @@ window.addEventListener("pageshow", refreshRemoteVideosWhenVisible);
 initializeApp();
 
 async function initializeApp() {
-  renderLibraryKey();
-  render();
-  await loadRemoteVideos();
-  await hydrateSavedBilibiliVideos();
-}
-
-async function switchLibrary() {
-  const nextLibraryKey = normalizeLibraryKey(window.prompt("输入库名/暗号", state.libraryKey));
-  if (!nextLibraryKey || nextLibraryKey === state.libraryKey) return;
-
-  state.libraryKey = nextLibraryKey;
-  state.activeCategory = "all";
-  localStorage.setItem(LIBRARY_KEY_STORAGE, state.libraryKey);
-  setLibraryUrlParam(state.libraryKey);
-  state.videos = loadVideos();
-  renderLibraryKey();
+  const url = new URL(window.location.href);
+  url.searchParams.delete("library");
+  window.history.replaceState({}, "", url);
+  renderSyncState();
   render();
   await loadRemoteVideos();
   await hydrateSavedBilibiliVideos();
@@ -109,6 +115,7 @@ async function switchLibrary() {
 
 async function handleSubmit(event) {
   event.preventDefault();
+  if (state.busy) return;
 
   const entries = parseVideoEntries(elements.urlsInput.value);
   if (!entries.length) {
@@ -130,15 +137,18 @@ async function handleSubmit(event) {
   setStatus(`正在整理 ${uniqueEntries.length} 个视频...`);
 
   const videos = [];
-  for (let index = 0; index < uniqueEntries.length; index += 1) {
-    const entry = uniqueEntries[index];
-    const url = entry.url;
-    setStatus(`正在整理 ${index + 1}/${uniqueEntries.length}...`);
-    const metadata = await getVideoMetadata(url);
-    videos.push(createVideo(entry, metadata, category));
-  }
-
+  state.syncGeneration++;
+  state.busy = true;
   try {
+    requireCloudConnection();
+    for (let index = 0; index < uniqueEntries.length; index += 1) {
+      const entry = uniqueEntries[index];
+      const url = entry.url;
+      setStatus(`正在整理 ${index + 1}/${uniqueEntries.length}...`);
+      const metadata = await getVideoMetadata(url);
+      videos.push(createVideo(entry, metadata, category));
+    }
+
     const savedVideos = await persistVideos(videos);
     state.videos = mergeVideos(savedVideos, state.videos);
     saveVideos();
@@ -151,6 +161,9 @@ async function handleSubmit(event) {
     elements.form.querySelector("button[type='submit']").disabled = false;
     setStatus(getFriendlyErrorMessage(error, "保存失败，请稍后再试。"));
     return;
+  } finally {
+    state.busy = false;
+    elements.form.querySelector("button[type='submit']").disabled = false;
   }
 
   if (duplicateCount > 0) {
@@ -164,24 +177,16 @@ async function exportVideos() {
     return;
   }
 
-  const text = state.videos
-    .map((video) => `【${video.title || "未命名视频"}】 ${video.url}`)
-    .join("\n");
-
-  try {
-    await navigator.clipboard.writeText(text);
-    window.alert(`已复制 ${state.videos.length} 个标题和链接。`);
-  } catch {
-    downloadExportFile(text);
-  }
+  const videos = state.videos.map(({ title, url, category, thumbnail }) => ({ title, url, category, thumbnail: safeCoverUrl(thumbnail) || "" }));
+  downloadExportFile(JSON.stringify({ format: "workout-videos", version: 1, exportedAt: new Date().toISOString(), videos }, null, 2));
 }
 
 function downloadExportFile(text) {
-  const blob = new Blob([text], { type: "text/plain;charset=utf-8" });
+  const blob = new Blob([text], { type: "application/json;charset=utf-8" });
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;
-  link.download = `动一动-视频导出-${new Date().toISOString().slice(0, 10)}.txt`;
+  link.download = `动一动-视频备份-${new Date().toISOString().slice(0, 10)}.json`;
   document.body.append(link);
   link.click();
   link.remove();
@@ -189,7 +194,7 @@ function downloadExportFile(text) {
 }
 
 async function copyLibraryLink() {
-  const url = getLibraryUrl(state.libraryKey);
+  const url = getLibraryUrl();
 
   try {
     await navigator.clipboard.writeText(url);
@@ -199,15 +204,59 @@ async function copyLibraryLink() {
   }
 }
 
-function getLibraryUrl(libraryKey) {
+function parseBackup(text) {
+  const backup = JSON.parse(text);
+  if (backup?.format !== "workout-videos" || backup.version !== 1 || !Array.isArray(backup.videos) || backup.videos.length > 2000) {
+    throw new Error("不是支持的视频备份文件（版本 1，最多 2000 条）。");
+  }
+  return backup.videos.map((item) => {
+    if (!item || typeof item.url !== "string" || item.url.length > 4096 || !safeHttpUrl(item.url) ||
+        typeof item.title !== "string" || item.title.length > 1000 ||
+        typeof item.category !== "string" || item.category.length > 500 ||
+        (item.thumbnail && (typeof item.thumbnail !== "string" || item.thumbnail.length > 4096 || !safeCoverUrl(item.thumbnail)))) {
+      throw new Error("备份包含无效的视频信息，未导入任何内容。");
+    }
+    const url = safeHttpUrl(item.url);
+    const parsed = parseVideoUrl(url);
+    return createVideo({ url, title: item.title }, { ...parsed, thumbnail: safeCoverUrl(item.thumbnail) || parsed.thumbnail || "" }, serializeTags(item.category.split("｜")));
+  });
+}
+
+async function importVideos(event) {
+  const file = event.target.files?.[0];
+  event.target.value = "";
+  if (!file || state.busy) return;
+  state.syncGeneration++;
+  state.busy = true;
+  try {
+    requireCloudConnection();
+    if (file.size > 5 * 1024 * 1024) throw new Error("备份文件不能超过 5 MB。");
+    const videos = parseBackup(await file.text());
+    const seen = new Set(state.videos.map((video) => safeHttpUrl(video.url)));
+    const additions = videos.filter((video) => {
+      if (seen.has(video.url)) return false;
+      seen.add(video.url);
+      return true;
+    });
+    if (!additions.length) { window.alert("没有新视频可导入，已有链接均已跳过。"); return; }
+    const target = state.writeToken ? "云端收藏" : "此浏览器的本地收藏";
+    if (!window.confirm(`向${target}追加 ${additions.length} 个视频，跳过 ${videos.length - additions.length} 个重复项？不会覆盖已有视频。`)) return;
+    const saved = await persistVideos(additions);
+    state.videos = mergeVideos(saved, state.videos);
+    saveVideos();
+    render();
+  } catch (error) {
+    window.alert(getFriendlyErrorMessage(error, "导入失败。"));
+  } finally {
+    state.busy = false;
+  }
+}
+
+function getLibraryUrl() {
   const url = new URL(window.location.href);
   url.hash = "";
 
-  if (libraryKey === DEFAULT_LIBRARY_KEY) {
-    url.searchParams.delete("library");
-  } else {
-    url.searchParams.set("library", libraryKey);
-  }
+  url.searchParams.delete("library");
 
   return url.toString();
 }
@@ -230,9 +279,7 @@ async function getVideoMetadata(url) {
   if (!oembedUrl) return fallback;
 
   try {
-    const response = await fetch(oembedUrl);
-    if (!response.ok) return fallback;
-    const data = await response.json();
+    const data = await fetchJson(oembedUrl);
     return {
       ...fallback,
       title: data.title || fallback.title,
@@ -365,9 +412,8 @@ async function fetchBilibiliPayload(bvid) {
   const apiUrl = `https://api.bilibili.com/x/web-interface/view?bvid=${encodedBvid}`;
   const proxyUrl = `${BILIBILI_METADATA_PROXY}?bvid=${encodedBvid}`;
   const attempts = [
-    () => fetchJson(proxyUrl, { allowJsonp: false }),
-    () => fetchJson(apiUrl, { allowJsonp: false }),
-    () => fetchJson(apiUrl, { allowJsonp: true }),
+    () => fetchJson(proxyUrl, { timeoutMs: 10000 }),
+    () => fetchJson(apiUrl),
   ];
 
   for (const attempt of attempts) {
@@ -383,50 +429,17 @@ async function fetchBilibiliPayload(bvid) {
 }
 
 async function fetchJson(url, options = {}) {
-  const { allowJsonp = true } = options;
+  const { timeoutMs = 5000 } = options;
   const controller = new AbortController();
-  const timeout = window.setTimeout(() => controller.abort(), 5000);
+  const timeout = window.setTimeout(() => controller.abort(), timeoutMs);
 
   try {
     const response = await fetch(url, { signal: controller.signal });
     if (!response.ok) throw new Error("metadata request failed");
-    return response.json();
-  } catch {
-    if (!allowJsonp) throw new Error("metadata request failed");
-    return fetchJsonp(url);
+    return await response.json();
   } finally {
     window.clearTimeout(timeout);
   }
-}
-
-function fetchJsonp(url) {
-  return new Promise((resolve, reject) => {
-    const callbackName = `__biliCallback_${Date.now()}_${Math.random().toString(16).slice(2)}`;
-    const script = document.createElement("script");
-    const timeout = window.setTimeout(() => {
-      cleanup();
-      reject(new Error("metadata jsonp timed out"));
-    }, 5000);
-
-    function cleanup() {
-      window.clearTimeout(timeout);
-      script.remove();
-      delete window[callbackName];
-    }
-
-    window[callbackName] = (payload) => {
-      cleanup();
-      resolve(payload);
-    };
-
-    const separator = url.includes("?") ? "&" : "?";
-    script.src = `${url}${separator}callback=${callbackName}`;
-    script.onerror = () => {
-      cleanup();
-      reject(new Error("metadata jsonp failed"));
-    };
-    document.head.append(script);
-  });
 }
 
 function mergeBilibiliPayload(parsed, fallback, payload) {
@@ -483,11 +496,29 @@ function isBilibiliImageUrl(url) {
   }
 }
 
+function safeHttpUrl(value) {
+  if (typeof value !== "string" || /[\u0000-\u0020\u007f\\]/.test(value)) return "";
+  try {
+    const url = new URL(value);
+    return ["https:", "http:"].includes(url.protocol) && !url.username && !url.password ? url.href : "";
+  } catch {
+    return "";
+  }
+}
+
+function safeCoverUrl(value) {
+  if (safeHttpUrl(value)) return value;
+  if (typeof value !== "string" || !value.startsWith("/api/bilibili?")) return "";
+  const proxy = new URL(value, window.location.href);
+  const cover = safeHttpUrl(proxy.searchParams.get("cover"));
+  return cover && isBilibiliImageUrl(cover) ? makeBilibiliCoverProxyUrl(cover) : "";
+}
+
 function getThumbnailSrc(video) {
   const thumbnail = video.thumbnail || "";
-  if (isBilibiliImageUrl(thumbnail)) return makeBilibiliCoverProxyUrl(thumbnail);
+  if (safeHttpUrl(thumbnail) && isBilibiliImageUrl(thumbnail)) return makeBilibiliCoverProxyUrl(thumbnail);
   if (isFallbackThumbnail(thumbnail)) return makeFallbackThumbnail(video.title || getDisplaySource(video));
-  return thumbnail;
+  return safeCoverUrl(thumbnail) || makeFallbackThumbnail(video.title || getDisplaySource(video));
 }
 
 function getPlayableEmbedUrl(video) {
@@ -552,13 +583,8 @@ function render() {
   elements.videoCount.textContent = `${state.videos.length} 个视频`;
 }
 
-function renderLibraryKey() {
-  elements.libraryButton.textContent = getLibraryDisplayName(state.libraryKey);
-  elements.libraryButton.title = `当前库：${state.libraryKey}`;
-}
-
-function getLibraryDisplayName(libraryKey) {
-  return libraryKey === DEFAULT_LIBRARY_KEY ? "N" : libraryKey;
+function renderSyncState() {
+  elements.syncButton.textContent = !state.writeToken ? "同步设置" : state.storageMode === "remote" ? "已连接同步" : "同步未连接";
 }
 
 function renderFilters() {
@@ -688,6 +714,7 @@ function closeTagRenameModal() {
 
 async function handleTagRenameSubmit(event) {
   event.preventDefault();
+  if (state.busy) return;
   const oldTag = state.renamingTag;
   const nextTag = normalizeTag(elements.tagRenameInput.value);
   if (!nextTag || nextTag === oldTag) return;
@@ -699,6 +726,8 @@ async function handleTagRenameSubmit(event) {
   }
 
   elements.tagRenameForm.querySelector("button[type='submit']").disabled = true;
+  state.syncGeneration++;
+  state.busy = true;
   setTagRenameStatus("正在保存...");
   const previousCategories = new Map(affectedVideos.map((video) => [video.id, video.category]));
   affectedVideos.forEach((video) => {
@@ -725,6 +754,7 @@ async function handleTagRenameSubmit(event) {
     render();
     setTagRenameStatus(getFriendlyErrorMessage(error, "标签重命名失败，请稍后再试。"));
   } finally {
+    state.busy = false;
     elements.tagRenameForm.querySelector("button[type='submit']").disabled = false;
   }
 }
@@ -750,11 +780,26 @@ function renderCards() {
     const editButton = card.querySelector(".edit-button");
     const deleteButton = card.querySelector(".delete-button");
 
+    let triedDirectCover = false;
+    thumbnail.addEventListener("error", () => {
+      const coverUrl = new URL(safeCoverUrl(video.thumbnail) || "/", window.location.href);
+      const directCover = coverUrl.searchParams.get("cover");
+      if (!triedDirectCover && safeHttpUrl(directCover) && isBilibiliImageUrl(directCover)) {
+        triedDirectCover = true;
+        thumbnail.referrerPolicy = "no-referrer";
+        thumbnail.src = directCover;
+        return;
+      }
+      const fallback = makeFallbackThumbnail(video.title || getDisplaySource(video));
+      if (thumbnail.getAttribute("src") !== fallback) thumbnail.src = fallback;
+    });
     thumbnail.src = getThumbnailSrc(video);
     thumbnail.alt = `${video.title} 的封面`;
     card.querySelector(".source-label").textContent = getDisplaySource(video);
     titleLink.textContent = video.title;
-    titleLink.href = video.url;
+    const originalUrl = safeHttpUrl(video.url);
+    if (originalUrl) titleLink.href = originalUrl;
+    else titleLink.removeAttribute("href");
     renderCardTags(card, video);
     thumbnailButton.addEventListener("click", () => playVideo(video));
     editButton.addEventListener("click", (event) => {
@@ -784,8 +829,14 @@ function renderCardTags(card, video) {
 }
 
 function playVideo(video) {
+  const originalUrl = safeHttpUrl(video.url);
+  const playbackUrl = safeHttpUrl(video.embedUrl || video.url);
+  if (!originalUrl || !playbackUrl) {
+    window.alert("这个视频的链接不安全或无效，请编辑后使用 HTTP(S) 地址。");
+    return;
+  }
   if (isExternalEntry(video)) {
-    window.open(video.embedUrl || video.url, "_blank", "noopener");
+    window.open(playbackUrl, "_blank", "noopener");
     return;
   }
 
@@ -793,12 +844,12 @@ function playVideo(video) {
   elements.playerModal.hidden = false;
   elements.playerSource.textContent = `${getDisplaySource(video)} · ${getVideoTags(video).join(" / ")}`;
   elements.playerTitleLink.textContent = video.title;
-  elements.playerTitleLink.href = video.url;
+  elements.playerTitleLink.href = originalUrl;
   elements.playerFrame.replaceChildren();
 
   if (video.kind === "video") {
     const player = document.createElement("video");
-    player.src = video.embedUrl;
+    player.src = playbackUrl;
     player.controls = true;
     player.autoplay = true;
     player.muted = false;
@@ -806,7 +857,7 @@ function playVideo(video) {
     elements.playerFrame.append(player);
   } else {
     const player = document.createElement("iframe");
-    player.src = getPlayableEmbedUrl(video);
+    player.src = safeHttpUrl(getPlayableEmbedUrl(video)) || playbackUrl;
     player.title = video.title;
     player.allow = "autoplay; accelerometer; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share";
     player.allowFullscreen = true;
@@ -826,10 +877,13 @@ function isExternalEntry(video) {
 }
 
 function deleteVideo(id) {
+  if (state.busy) return;
   const video = state.videos.find((item) => item.id === id);
   if (!video) return;
   const shouldDelete = window.confirm(`删除「${video.title}」吗？`);
   if (!shouldDelete) return;
+  state.syncGeneration++;
+  state.busy = true;
 
   deletePersistedVideo(id)
     .then(() => {
@@ -842,11 +896,12 @@ function deleteVideo(id) {
     })
     .catch((error) => {
       window.alert(getFriendlyErrorMessage(error, "删除失败，请稍后再试。"));
-    });
+    }).finally(() => { state.busy = false; });
 }
 
 async function handleEditSubmit(event) {
   event.preventDefault();
+  if (state.busy) return;
 
   const video = state.videos.find((item) => item.id === state.editingId);
   if (!video) return;
@@ -871,6 +926,8 @@ async function handleEditSubmit(event) {
   };
 
   elements.editForm.querySelector("button[type='submit']").disabled = true;
+  state.syncGeneration++;
+  state.busy = true;
   setEditStatus(isUrlChanged ? "正在重新整理视频链接..." : "正在保存...");
 
   try {
@@ -892,6 +949,7 @@ async function handleEditSubmit(event) {
   } catch (error) {
     setEditStatus(getFriendlyErrorMessage(error, "保存失败，请稍后再试。"));
   } finally {
+    state.busy = false;
     elements.editForm.querySelector("button[type='submit']").disabled = false;
   }
 }
@@ -905,21 +963,153 @@ function getFriendlyErrorMessage(error, fallback) {
 }
 
 async function loadRemoteVideos() {
+  if (!state.writeToken || state.busy) return;
+  const generation = state.syncGeneration;
+  const token = state.writeToken;
   try {
-    const localVideos = loadVideos();
-    const response = await fetch(videosApiUrl({ _: Date.now() }), { cache: "no-store" });
+    const response = await fetch(videosApiUrl({ _: Date.now() }), {
+      cache: "no-store", headers: { "x-app-token": token },
+    });
     if (!response.ok) throw new Error("remote unavailable");
     const videos = await response.json();
+    if (generation !== state.syncGeneration || token !== state.writeToken || state.busy) return;
     state.lastRemoteRefreshAt = Date.now();
     state.storageMode = "remote";
-    state.videos = videos.length ? videos : localVideos;
+    state.videos = videos;
     saveVideos();
     render();
-    if (!videos.length && localVideos.length) {
-      migrateLocalVideos(localVideos);
-    }
   } catch {
-    state.storageMode = "local";
+    if (generation !== state.syncGeneration) return;
+    state.storageMode = "offline";
+  }
+  renderSyncState();
+}
+
+function openSyncSettings() {
+  if (state.busy) { window.alert("正在保存视频，请完成后再切换同步。"); return; }
+  elements.syncModal.hidden = false;
+  elements.syncTokenInput.value = "";
+  elements.disconnectSyncButton.hidden = !state.writeToken;
+  elements.syncStatus.textContent = state.writeToken
+    ? "断开同步后会回到本地收藏，不会删除云端视频。重新连接时，如果此浏览器有本地收藏，会询问是否导入云端。"
+    : "没有自行部署？无需填写，直接使用本地收藏即可。连接后显示云端收藏；如果此浏览器有本地收藏，会询问是否导入，未经确认不会上传。";
+  elements.syncTokenInput.focus();
+}
+
+function closeSyncSettings() {
+  state.syncGeneration++;
+  elements.syncModal.hidden = true;
+  elements.syncTokenInput.value = "";
+}
+
+async function connectSync(event) {
+  event.preventDefault();
+  if (state.busy) return;
+  const token = elements.syncTokenInput.value.trim();
+  if (!token) return;
+  let localVideos = [];
+  try {
+    localVideos = state.writeToken ? JSON.parse(localStorage.getItem(LOCAL_STORAGE_KEY) || "[]") : state.videos;
+    if (!Array.isArray(localVideos)) localVideos = [];
+    localVideos = structuredClone(localVideos);
+  } catch { /* Never overwrite unreadable local data. */ }
+  const generation = ++state.syncGeneration;
+  elements.connectSyncButton.disabled = true;
+  elements.syncStatus.textContent = "正在连接…";
+  try {
+    const response = await fetch(videosApiUrl(), { cache: "no-store", headers: { "x-app-token": token } });
+    if (!response.ok) throw new Error(response.status === 401 ? "同步密钥不正确。" : "同步服务不可用，请检查自己的部署配置。");
+    const videos = await response.json();
+    if (generation !== state.syncGeneration || state.busy) return;
+    localStorage.setItem("exercise-video-library:write-token", token);
+    state.writeToken = token;
+    state.storageMode = "remote";
+    state.videos = videos;
+    state.activeCategory = "all";
+    state.lastRemoteRefreshAt = Date.now();
+    saveVideos();
+    render();
+    renderSyncState();
+    closeSyncSettings();
+    if (!offerLocalImport(localVideos)) await hydrateSavedBilibiliVideos();
+  } catch (error) {
+    if (generation === state.syncGeneration) elements.syncStatus.textContent = getFriendlyErrorMessage(error, "连接失败。");
+  } finally {
+    elements.connectSyncButton.disabled = false;
+  }
+}
+
+function offerLocalImport(videos) {
+  if (!videos.length) return false;
+  state.pendingLocalImport = { videos, token: state.writeToken };
+  elements.localImportStatus.textContent = `连接成功。检测到本地有 ${videos.length} 个视频，是否导入云端？`;
+  elements.localImportModal.hidden = false;
+  elements.skipLocalImportButton.focus();
+  return true;
+}
+
+function closeLocalImport() {
+  if (state.busy) return;
+  state.pendingLocalImport = null;
+  elements.localImportModal.hidden = true;
+  elements.syncButton.focus();
+}
+
+async function importLocalToCloud() {
+  const pending = state.pendingLocalImport;
+  if (state.busy || !pending) return;
+  state.busy = true;
+  state.syncGeneration++;
+  elements.confirmLocalImportButton.disabled = true;
+  elements.skipLocalImportButton.disabled = true;
+  try {
+    requireCloudConnection();
+    if (!state.writeToken || pending.token !== state.writeToken) throw new Error("同步连接已改变，请重新连接后再导入。");
+    const videos = parseBackup(JSON.stringify({ format: "workout-videos", version: 1,
+      videos: pending.videos.map((video) => ({ title: video.title || "未命名视频", url: video.url,
+        category: video.category || "未分类", thumbnail: safeCoverUrl(video.thumbnail) || "" })) }));
+    const seen = new Set(state.videos.map((video) => safeHttpUrl(video.url)));
+    const additions = videos.filter((video) => {
+      if (seen.has(video.url)) return false;
+      seen.add(video.url);
+      return true;
+    });
+    if (additions.length) {
+      elements.localImportStatus.textContent = `正在导入 ${additions.length} 个视频…`;
+      const saved = await persistVideos(additions);
+      state.videos = mergeVideos(saved, state.videos);
+      saveVideos();
+      render();
+    }
+    state.busy = false;
+    closeLocalImport();
+    window.alert(additions.length ? `已导入 ${additions.length} 个视频，跳过 ${videos.length - additions.length} 个重复项。本地收藏仍保留。` : "这些视频已在云端，无需重复导入。本地收藏仍保留。");
+  } catch (error) {
+    elements.localImportStatus.textContent = getFriendlyErrorMessage(error, "导入失败，本地收藏仍保留，请稍后重试。");
+  } finally {
+    state.busy = false;
+    elements.confirmLocalImportButton.disabled = false;
+    elements.skipLocalImportButton.disabled = false;
+  }
+}
+
+function disconnectSync() {
+  if (state.busy) return;
+  try { localStorage.removeItem("exercise-video-library:write-token"); }
+  catch { window.alert("浏览器不允许修改存储，未断开同步。"); return; }
+  state.syncGeneration++;
+  state.writeToken = "";
+  state.storageMode = "local";
+  state.activeCategory = "all";
+  state.videos = loadVideos();
+  render();
+  renderSyncState();
+  closeSyncSettings();
+}
+
+function requireCloudConnection() {
+  if (state.writeToken && state.storageMode !== "remote") {
+    throw new Error("云端未连接，暂时无法修改。请重新连接同步，或断开后使用本地收藏。");
   }
 }
 
@@ -930,7 +1120,8 @@ function refreshRemoteVideosWhenVisible() {
 }
 
 async function persistVideos(videos) {
-  if (state.storageMode !== "remote") {
+  requireCloudConnection();
+  if (!state.writeToken) {
     return videos;
   }
 
@@ -940,12 +1131,12 @@ async function persistVideos(videos) {
       "Content-Type": "application/json",
       ...writeTokenHeader(),
     },
-    body: JSON.stringify({ libraryKey: state.libraryKey, videos }),
+    body: JSON.stringify({ videos }),
   });
 
   if (response.status === 401) {
     promptForWriteToken();
-    throw new Error("需要写入密钥，已保存到本机后请再点一次保存。");
+    throw new Error("同步授权已失效，请重新连接后再保存。");
   }
 
   if (!response.ok) {
@@ -956,7 +1147,8 @@ async function persistVideos(videos) {
 }
 
 async function deletePersistedVideo(id) {
-  if (state.storageMode !== "remote") {
+  requireCloudConnection();
+  if (!state.writeToken) {
     return;
   }
 
@@ -967,7 +1159,7 @@ async function deletePersistedVideo(id) {
 
   if (response.status === 401) {
     promptForWriteToken();
-    throw new Error("需要写入密钥，已保存到本机后请再删除一次。");
+    throw new Error("同步授权已失效，请重新连接后再删除。");
   }
 
   if (!response.ok) {
@@ -976,7 +1168,8 @@ async function deletePersistedVideo(id) {
 }
 
 async function updatePersistedVideo(id, updates) {
-  if (state.storageMode !== "remote") {
+  requireCloudConnection();
+  if (!state.writeToken) {
     return updates;
   }
 
@@ -991,7 +1184,7 @@ async function updatePersistedVideo(id, updates) {
 
   if (response.status === 401) {
     promptForWriteToken();
-    throw new Error("需要写入密钥，已保存到本机后请再保存一次。");
+    throw new Error("同步授权已失效，请重新连接后再保存。");
   }
 
   if (!response.ok) {
@@ -1011,27 +1204,14 @@ function mergeVideos(incomingVideos, existingVideos) {
 
 function writeTokenHeader() {
   return {
-    "x-library-key": state.libraryKey,
     ...(state.writeToken ? { "x-app-token": state.writeToken } : {}),
   };
 }
 
 function promptForWriteToken() {
-  const token = window.prompt("请输入写入密钥");
-  if (!token) return;
-  state.writeToken = token;
-  localStorage.setItem("exercise-video-library:write-token", token);
-}
-
-async function migrateLocalVideos(localVideos) {
-  try {
-    const savedVideos = await persistVideos(localVideos);
-    state.videos = mergeVideos(savedVideos, state.videos);
-    saveVideos();
-    render();
-  } catch {
-    // Keep local cache visible if cloud migration is not permitted yet.
-  }
+  state.storageMode = "offline";
+  renderSyncState();
+  openSyncSettings();
 }
 
 function getCategories() {
@@ -1100,7 +1280,6 @@ function createVideo(entry, metadata, category) {
 
   return {
     id: crypto.randomUUID(),
-    libraryKey: state.libraryKey,
     url: entry.url,
     title,
     category,
@@ -1206,6 +1385,8 @@ function handleBackdropClick(event) {
 
 function handleKeydown(event) {
   if (event.key === "Escape") {
+    if (!elements.localImportModal.hidden) { closeLocalImport(); return; }
+    if (!elements.syncModal.hidden) closeSyncSettings();
     if (!elements.playerModal.hidden) closePlayerModal();
     if (!elements.editModal.hidden) closeEditModal();
     if (!elements.tagRenameModal.hidden) closeTagRenameModal();
@@ -1265,60 +1446,54 @@ function setTagRenameStatus(message) {
 function loadVideos() {
   try {
     const stored = localStorage.getItem(getStorageKey());
-    if (stored) return JSON.parse(stored) || [];
-    if (state.libraryKey === DEFAULT_LIBRARY_KEY) return JSON.parse(localStorage.getItem(LEGACY_STORAGE_KEY)) || [];
-    return [];
+    const videos = JSON.parse(stored || (state.writeToken ? localStorage.getItem(LEGACY_STORAGE_KEY) : "[]") || "[]");
+    if (!Array.isArray(videos) || videos.some((video) => !video || typeof video.url !== "string")) throw new Error("Invalid saved library");
+    state.storageBlockedKey = "";
+    return videos;
   } catch {
+    state.storageBlockedKey = getStorageKey();
+    warnStorage("无法读取浏览器收藏。原始数据未被覆盖；请先保留浏览器数据。当前操作仅保留在此页面，请及时导出。");
     return [];
   }
 }
 
 function saveVideos() {
-  localStorage.setItem(getStorageKey(), JSON.stringify(state.videos));
+  try {
+    if (state.storageBlockedKey === getStorageKey()) throw new Error("Unreadable original storage");
+    localStorage.setItem(getStorageKey(), JSON.stringify(state.videos));
+  } catch {
+    warnStorage(state.writeToken ? "无法保存本机缓存。云端操作请以同步结果为准。" : "浏览器存储不可用或已满，当前改动仅保留在此页面。关闭或刷新前请导出备份。");
+  }
+}
+
+function readStoredToken() {
+  try { return localStorage.getItem("exercise-video-library:write-token") || ""; }
+  catch { return ""; }
+}
+
+function warnStorage(message) {
+  const note = document.querySelector(".footer-note");
+  if (note) { note.textContent = message; note.setAttribute("role", "alert"); }
+  if (!state.storageWarningShown) {
+    state.storageWarningShown = true;
+    window.setTimeout(() => window.alert(message), 0);
+  }
 }
 
 function getStorageKey() {
-  return `${STORAGE_PREFIX}:${state.libraryKey}`;
+  return state.writeToken ? `${STORAGE_PREFIX}:default` : LOCAL_STORAGE_KEY;
 }
 
 function videosApiUrl(params = {}) {
-  const searchParams = new URLSearchParams({
-    library: state.libraryKey,
-  });
+  const searchParams = new URLSearchParams();
   Object.entries(params).forEach(([key, value]) => {
     if (value !== undefined && value !== null) searchParams.set(key, value);
   });
   return `${VIDEOS_API}?${searchParams.toString()}`;
 }
 
-function getInitialLibraryKey() {
-  const urlLibraryKey = normalizeLibraryKey(new URLSearchParams(window.location.search).get("library"));
-  if (urlLibraryKey) {
-    localStorage.setItem(LIBRARY_KEY_STORAGE, urlLibraryKey);
-    return urlLibraryKey;
-  }
-
-  return DEFAULT_LIBRARY_KEY;
-}
-
-function normalizeLibraryKey(value) {
-  return String(value || "")
-    .trim()
-    .replace(/\s+/g, "-")
-    .slice(0, 64);
-}
-
-function setLibraryUrlParam(libraryKey) {
-  const url = new URL(window.location.href);
-  if (libraryKey === DEFAULT_LIBRARY_KEY) {
-    url.searchParams.delete("library");
-  } else {
-    url.searchParams.set("library", libraryKey);
-  }
-  window.history.replaceState({}, "", url);
-}
-
 async function hydrateSavedBilibiliVideos() {
+  const generation = state.syncGeneration;
   const targets = state.videos.filter((video) => {
     const parsed = parseVideoUrl(video.url);
     return (
@@ -1334,6 +1509,7 @@ async function hydrateSavedBilibiliVideos() {
   for (const video of targets) {
     const parsed = parseVideoUrl(video.url);
     const metadata = await getVideoMetadata(video.url);
+    if (generation !== state.syncGeneration || state.busy) return;
     if (metadata.thumbnail && (!isFallbackThumbnail(metadata.thumbnail) || video.thumbnail !== metadata.thumbnail)) {
       video.thumbnail = metadata.thumbnail;
       changed = true;

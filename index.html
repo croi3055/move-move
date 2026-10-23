@@ -20,14 +20,13 @@
     <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
     <link rel="icon" type="image/png" href="/assets/favicon.png" />
     <link rel="apple-touch-icon" href="/assets/favicon.png" />
-    <link rel="stylesheet" href="./style.css?v=32" />
+    <link rel="stylesheet" href="./style.css?v=33" />
   </head>
   <body>
     <main class="app-shell">
       <header class="topbar">
         <div class="brand-area">
           <div class="brand-mark">我的跟练视频</div>
-          <button class="library-button" type="button" id="libraryButton">N</button>
         </div>
         <div class="top-actions">
           <label class="search-box">
@@ -52,7 +51,12 @@
           <span aria-hidden="true">｜</span>
           <button class="footer-export-button" type="button" id="exportButton">导出</button>
           <span aria-hidden="true">｜</span>
-          <button class="footer-export-button" type="button" id="copyLibraryLinkButton">复制页面地址</button>
+          <button class="footer-export-button" type="button" id="importButton">导入</button>
+          <input id="importFile" type="file" accept=".json,application/json" hidden>
+          <span aria-hidden="true">｜</span>
+          <button class="footer-export-button" type="button" id="copyLibraryLinkButton">复制链接</button>
+          <span aria-hidden="true">｜</span>
+          <button class="footer-export-button" type="button" id="syncButton">同步设置</button>
         </span>
         <span class="footer-note">右上角添加视频，保存后会出现在上方。</span>
       </footer>
@@ -164,6 +168,39 @@
       </section>
     </div>
 
+    <div class="modal-backdrop" id="syncModal" hidden>
+      <section class="modal-panel rename-modal" role="dialog" aria-modal="true" aria-labelledby="syncTitle">
+        <h2 id="syncTitle">同步设置</h2>
+        <form id="syncForm" class="video-form">
+          <p class="status-line" id="syncHelp">如果你已自行部署本站并接入 Supabase，可以输入部署时设置的 APP_WRITE_TOKEN，实现跨设备同步。它通常设置在 Vercel 的环境变量中，不是 Supabase 的 API Key。</p>
+          <label class="input-group">
+            <span>同步密钥（APP_WRITE_TOKEN）</span>
+            <input id="syncTokenInput" type="password" autocomplete="off" aria-describedby="syncHelp syncStatus" required />
+          </label>
+          <p class="status-line" id="syncStatus" role="status"></p>
+          <div class="modal-actions">
+            <button class="secondary-button" type="button" id="disconnectSyncButton" hidden>断开同步</button>
+            <button class="secondary-button" type="button" id="cancelSyncButton">取消</button>
+            <button class="primary-button" type="submit" id="connectSyncButton">连接</button>
+          </div>
+        </form>
+      </section>
+    </div>
+
+    <div class="modal-backdrop" id="localImportModal" hidden>
+      <section class="modal-panel rename-modal" role="dialog" aria-modal="true" aria-labelledby="localImportTitle">
+        <h2 id="localImportTitle">导入本地收藏</h2>
+        <div class="video-form">
+          <p class="status-line" id="localImportStatus" role="status"></p>
+          <p class="status-line">跳过重复链接，不覆盖云端已有视频，也不会删除本地收藏。</p>
+          <div class="modal-actions">
+            <button class="secondary-button" type="button" id="skipLocalImportButton">暂不导入</button>
+            <button class="primary-button" type="button" id="confirmLocalImportButton">导入云端</button>
+          </div>
+        </div>
+      </section>
+    </div>
+
     <template id="videoCardTemplate">
       <article class="video-card">
         <button class="thumbnail-button" type="button">
@@ -184,6 +221,6 @@
       </article>
     </template>
 
-    <script src="./script.js?v=32"></script>
+    <script src="./script.js?v=38"></script>
   </body>
 </html>

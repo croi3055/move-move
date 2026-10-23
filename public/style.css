@@ -867,6 +867,10 @@ select:focus {
   gap: 14px;
 }
 
+.modal-actions > [hidden] {
+  display: none;
+}
+
 @media (min-width: 1500px) {
   .video-grid {
     grid-template-columns: repeat(5, minmax(0, 1fr));

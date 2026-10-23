@@ -1,4 +1,11 @@
 .env
 .env.local
+.env.*
+!.env.example
+.vercel/
+*.pem
+*.key
+*.p12
+*.pfx
 node_modules/
 .DS_Store

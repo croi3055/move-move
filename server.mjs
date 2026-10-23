@@ -1,6 +1,9 @@
 import { createServer } from "node:http";
 import { readFile } from "node:fs/promises";
-import { extname, join, normalize } from "node:path";
+import { extname, join } from "node:path";
+import { fetchBilibiliVideo } from "./lib/bilibili.js";
+import { allowMetadataRequest, fetchCover } from "./lib/cover-proxy.js";
+import { validateVideoInput } from "./lib/video-validation.js";
 
 const root = process.cwd();
 const port = Number(process.env.PORT || 4173);
@@ -12,6 +15,8 @@ const mimeTypes = {
   ".js": "text/javascript; charset=utf-8",
   ".json": "application/json; charset=utf-8",
   ".svg": "image/svg+xml",
+  ".png": "image/png",
+  ".ico": "image/x-icon",
 };
 
 createServer(async (request, response) => {
@@ -38,6 +43,10 @@ createServer(async (request, response) => {
 });
 
 async function handleBilibiliMetadata(url, response) {
+  if (!allowMetadataRequest(response.socket?.remoteAddress)) {
+    response.writeHead(429, { "Retry-After": "60", "Cache-Control": "no-store" });
+    response.end("Too many requests"); return;
+  }
   const coverUrl = url.searchParams.get("cover") || "";
   if (coverUrl) {
     await handleBilibiliCoverProxy(coverUrl, response);
@@ -46,31 +55,18 @@ async function handleBilibiliMetadata(url, response) {
 
   const bvid = url.searchParams.get("bvid") || "";
 
-  if (!/^BV[a-zA-Z0-9]+$/.test(bvid)) {
+  if (!/^BV[a-zA-Z0-9]{10}$/.test(bvid)) {
     response.writeHead(400, { "Content-Type": "application/json; charset=utf-8" });
     response.end(JSON.stringify({ code: -1, message: "Invalid bvid" }));
     return;
   }
 
-  const upstream = await fetch(`https://api.bilibili.com/x/web-interface/view?bvid=${encodeURIComponent(bvid)}`, {
-    headers: {
-      Referer: "https://www.bilibili.com/",
-      "User-Agent": "Mozilla/5.0",
-    },
-  });
-
-  if (!upstream.ok) {
-    response.writeHead(upstream.status, { "Content-Type": "application/json; charset=utf-8" });
-    response.end(JSON.stringify({ code: -1, message: "Bilibili metadata request failed" }));
-    return;
-  }
-
-  const payload = await upstream.json();
-  const data = payload.data;
-
-  if (!data) {
-    response.writeHead(404, { "Content-Type": "application/json; charset=utf-8" });
-    response.end(JSON.stringify({ code: -1, message: "Bilibili video not found" }));
+  let data;
+  try {
+    data = await fetchBilibiliVideo(bvid);
+  } catch {
+    response.writeHead(502, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" });
+    response.end(JSON.stringify({ code: -1, message: "Bilibili metadata temporarily unavailable" }));
     return;
   }
 
@@ -92,57 +88,34 @@ async function handleBilibiliMetadata(url, response) {
 }
 
 async function handleBilibiliCoverProxy(coverUrl, response) {
-  const safeCoverUrl = getSafeBilibiliCoverUrl(coverUrl);
-
-  if (!safeCoverUrl) {
-    response.writeHead(400, { "Content-Type": "application/json; charset=utf-8" });
-    response.end(JSON.stringify({ code: -1, message: "Invalid cover url" }));
-    return;
-  }
-
-  const upstream = await fetch(safeCoverUrl, {
-    headers: {
-      Referer: "https://www.bilibili.com/",
-      "User-Agent": "Mozilla/5.0",
-    },
-  });
-
-  if (!upstream.ok) {
-    response.writeHead(upstream.status, { "Content-Type": "application/json; charset=utf-8" });
-    response.end(JSON.stringify({ code: -1, message: "Bilibili cover request failed" }));
-    return;
-  }
-
-  const imageBuffer = Buffer.from(await upstream.arrayBuffer());
-  response.writeHead(200, {
-    "Cache-Control": "public, max-age=86400",
-    "Content-Type": upstream.headers.get("content-type") || "image/jpeg",
-  });
-  response.end(imageBuffer);
-}
-
-function getSafeBilibiliCoverUrl(coverUrl) {
   try {
-    const parsedUrl = new URL(coverUrl.startsWith("//") ? `https:${coverUrl}` : coverUrl);
-    const isAllowedHost = parsedUrl.hostname === "hdslb.com" || parsedUrl.hostname.endsWith(".hdslb.com");
-    const isAllowedProtocol = parsedUrl.protocol === "https:" || parsedUrl.protocol === "http:";
-    if (!isAllowedHost || !isAllowedProtocol) return "";
-    parsedUrl.protocol = "https:";
-    return parsedUrl.toString();
+    const { type, buffer } = await fetchCover(coverUrl);
+    response.writeHead(200, { "Cache-Control": "public, max-age=86400", "Content-Type": type, "X-Content-Type-Options": "nosniff" });
+    response.end(buffer);
   } catch {
-    return "";
+    response.writeHead(502, { "Cache-Control": "no-store" });
+    response.end("Cover unavailable");
   }
 }
 
 async function serveStaticFile(url, response) {
   const requestedPath = url.pathname === "/" ? "/index.html" : url.pathname;
-  const filePath = normalize(join(root, decodeURIComponent(requestedPath)));
-
-  if (!filePath.startsWith(root)) {
-    response.writeHead(403, { "Content-Type": "text/plain; charset=utf-8" });
-    response.end("Forbidden");
+  // Never expose the project directory itself: it may contain credentials and Git metadata.
+  const staticFiles = {
+    "/index.html": "index.html",
+    "/style.css": "style.css",
+    "/script.js": "script.js",
+    "/favicon.ico": "public/favicon.ico",
+    "/favicon-32.png": "public/favicon-32.png",
+    "/assets/favicon.png": "public/assets/favicon.png",
+  };
+  const relativePath = Object.hasOwn(staticFiles, requestedPath) ? staticFiles[requestedPath] : "";
+  if (!relativePath) {
+    response.writeHead(404, { "Content-Type": "text/plain; charset=utf-8" });
+    response.end("Not Found");
     return;
   }
+  const filePath = join(root, relativePath);
 
   try {
     const content = await readFile(filePath);
@@ -162,7 +135,21 @@ async function handleVideosApi(request, url, response) {
     return;
   }
 
-  const libraryKey = getLibraryKey(request, url);
+  const libraryKey = DEFAULT_LIBRARY_KEY;
+  const requestedLibrary = url.searchParams.get("library") || request.headers["x-library-key"];
+  if (requestedLibrary && requestedLibrary !== DEFAULT_LIBRARY_KEY) {
+    sendJson(response, 400, { error: "不再支持共享视频库。" });
+    return;
+  }
+
+  if (!process.env.APP_WRITE_TOKEN?.trim()) {
+    sendJson(response, 503, { error: "服务器未配置同步密钥。" });
+    return;
+  }
+  if (!isAuthorized(request)) {
+    sendJson(response, 401, { error: "同步密钥无效。" });
+    return;
+  }
 
   if (request.method === "GET") {
     const data = await supabaseRequest(`videos?library_key=eq.${encodeURIComponent(libraryKey)}&select=*&order=created_at.desc`);
@@ -184,12 +171,19 @@ async function handleVideosApi(request, url, response) {
       return;
     }
 
+    let rows;
+    try {
+      rows = videos.map((video) => toRow(validateVideoInput(video), libraryKey));
+    } catch (error) {
+      sendJson(response, 400, { error: error.message });
+      return;
+    }
     const data = await supabaseRequest("videos?on_conflict=library_key,url", {
       method: "POST",
       headers: {
         Prefer: "resolution=merge-duplicates,return=representation",
       },
-      body: JSON.stringify(videos.map((video) => toRow(video, libraryKey))),
+      body: JSON.stringify(rows),
     });
     sendJson(response, 200, data.map(fromRow));
     return;
@@ -230,7 +224,13 @@ async function handleVideosApi(request, url, response) {
       return;
     }
 
-    const body = await readJsonBody(request);
+    let body;
+    try {
+      body = validateVideoInput(await readJsonBody(request), { partial: true });
+    } catch (error) {
+      sendJson(response, 400, { error: error.message });
+      return;
+    }
     const updates = {};
     if (typeof body.title === "string" && body.title.trim()) updates.title = body.title.trim();
     if (typeof body.category === "string") updates.category = body.category.trim() || "未分类";
@@ -275,11 +275,10 @@ async function supabaseRequest(path, options = {}) {
   return upstream.json();
 }
 
-function isAuthorized(request, libraryKey) {
+function isAuthorized(request) {
   const token = process.env.APP_WRITE_TOKEN;
-  if (!token) return true;
-  if (request.headers["x-app-token"] === token) return true;
-  return libraryKey !== DEFAULT_LIBRARY_KEY && normalizeLibraryKey(request.headers["x-library-key"]) === libraryKey;
+  if (!token?.trim()) return false;
+  return request.headers["x-app-token"] === token;
 }
 
 function readJsonBody(request) {
@@ -300,7 +299,7 @@ function readJsonBody(request) {
 }
 
 function sendJson(response, statusCode, payload) {
-  response.writeHead(statusCode, { "Content-Type": "application/json; charset=utf-8" });
+  response.writeHead(statusCode, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "private, no-store" });
   response.end(JSON.stringify(payload));
 }
 
@@ -332,15 +331,4 @@ function fromRow(row) {
     kind: row.kind,
     createdAt: new Date(row.created_at).getTime(),
   };
-}
-
-function getLibraryKey(request, url) {
-  return normalizeLibraryKey(url.searchParams.get("library") || request.headers["x-library-key"]) || DEFAULT_LIBRARY_KEY;
-}
-
-function normalizeLibraryKey(value) {
-  return String(value || "")
-    .trim()
-    .replace(/\s+/g, "-")
-    .slice(0, 64);
 }

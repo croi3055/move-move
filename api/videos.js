@@ -1,13 +1,30 @@
+import { validateVideoInput } from "../lib/video-validation.js";
+
 const TABLE = "videos";
 const DEFAULT_LIBRARY_KEY = "default";
 
 export default async function handler(request, response) {
+  response.setHeader("Cache-Control", "private, no-store");
   if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
     response.status(503).json({ error: "Supabase is not configured" });
     return;
   }
 
-  const libraryKey = getLibraryKey(request);
+  const libraryKey = DEFAULT_LIBRARY_KEY;
+  const requestedLibrary = request.query.library || request.headers["x-library-key"];
+  if (requestedLibrary && requestedLibrary !== DEFAULT_LIBRARY_KEY) {
+    response.status(400).json({ error: "不再支持共享视频库。" });
+    return;
+  }
+
+  if (!process.env.APP_WRITE_TOKEN?.trim()) {
+    response.status(503).json({ error: "服务器未配置同步密钥。" });
+    return;
+  }
+  if (!isAuthorized(request)) {
+    response.status(401).json({ error: "同步密钥无效。" });
+    return;
+  }
 
   if (request.method === "GET") {
     await listVideos(response, libraryKey);
@@ -59,7 +76,13 @@ async function createVideos(request, response, libraryKey) {
     return;
   }
 
-  const rows = videos.map((video) => toRow(video, libraryKey));
+  let rows;
+  try {
+    rows = videos.map((video) => toRow(validateVideoInput(video), libraryKey));
+  } catch (error) {
+    response.status(400).json({ error: error.message });
+    return;
+  }
   const data = await supabaseRequest(`${TABLE}?on_conflict=library_key,url`, {
     method: "POST",
     headers: {
@@ -91,7 +114,13 @@ async function deleteVideo(request, response, libraryKey) {
 
 async function updateVideo(request, response, libraryKey) {
   const id = request.query.id;
-  const body = parseBody(request.body);
+  let body;
+  try {
+    body = validateVideoInput(parseBody(request.body), { partial: true });
+  } catch (error) {
+    response.status(400).json({ error: error.message });
+    return;
+  }
 
   if (!id) {
     response.status(400).json({ error: "Missing id" });
@@ -144,11 +173,10 @@ async function supabaseRequest(path, options = {}) {
   return response.json();
 }
 
-function isAuthorized(request, libraryKey) {
+function isAuthorized(request) {
   const token = process.env.APP_WRITE_TOKEN;
-  if (!token) return true;
-  if (request.headers["x-app-token"] === token) return true;
-  return libraryKey !== DEFAULT_LIBRARY_KEY && normalizeLibraryKey(request.headers["x-library-key"]) === libraryKey;
+  if (!token?.trim()) return false;
+  return request.headers["x-app-token"] === token;
 }
 
 function parseBody(body) {
@@ -191,16 +219,4 @@ function fromRow(row) {
     kind: row.kind,
     createdAt: new Date(row.created_at).getTime(),
   };
-}
-
-function getLibraryKey(request) {
-  return normalizeLibraryKey(request.query.library || request.headers["x-library-key"]) || DEFAULT_LIBRARY_KEY;
-}
-
-function normalizeLibraryKey(value) {
-  const rawValue = Array.isArray(value) ? value[0] : value;
-  return String(rawValue || "")
-    .trim()
-    .replace(/\s+/g, "-")
-    .slice(0, 64);
 }

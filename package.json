@@ -6,6 +6,7 @@
   "scripts": {
     "build": "mkdir -p public && cp index.html style.css script.js public/",
     "dev": "node server.mjs",
-    "check": "node --check script.js && node --check server.mjs && node --check api/bilibili.js && node --check api/videos.js"
+    "check": "node --check script.js && node --check server.mjs && node --check api/bilibili.js && node --check api/videos.js && node --check lib/bilibili.js && node --check lib/video-validation.js && node --check lib/cover-proxy.js",
+    "test": "node --test tests/*.test.mjs"
   }
 }
