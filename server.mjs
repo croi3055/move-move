@@ -181,7 +181,7 @@ async function handleVideosApi(request, url, response) {
     const data = await supabaseRequest("videos?on_conflict=library_key,url", {
       method: "POST",
       headers: {
-        Prefer: "resolution=merge-duplicates,return=representation",
+        Prefer: "resolution=ignore-duplicates,return=representation",
       },
       body: JSON.stringify(rows),
     });

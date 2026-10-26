@@ -124,7 +124,7 @@ async function handleSubmit(event) {
   }
 
   const category = serializeTags([...state.selectedTags, elements.tagInput.value]);
-  const existingUrls = new Set(state.videos.map((video) => video.url));
+  const existingUrls = new Set(state.videos.map((video) => normalizeVideoUrl(video.url)));
   const uniqueEntries = entries.filter((entry) => !existingUrls.has(entry.url));
   const duplicateCount = entries.length - uniqueEntries.length;
 
@@ -216,7 +216,7 @@ function parseBackup(text) {
         (item.thumbnail && (typeof item.thumbnail !== "string" || item.thumbnail.length > 4096 || !safeCoverUrl(item.thumbnail)))) {
       throw new Error("备份包含无效的视频信息，未导入任何内容。");
     }
-    const url = safeHttpUrl(item.url);
+    const url = normalizeVideoUrl(item.url);
     const parsed = parseVideoUrl(url);
     return createVideo({ url, title: item.title }, { ...parsed, thumbnail: safeCoverUrl(item.thumbnail) || parsed.thumbnail || "" }, serializeTags(item.category.split("｜")));
   });
@@ -232,7 +232,7 @@ async function importVideos(event) {
     requireCloudConnection();
     if (file.size > 5 * 1024 * 1024) throw new Error("备份文件不能超过 5 MB。");
     const videos = parseBackup(await file.text());
-    const seen = new Set(state.videos.map((video) => safeHttpUrl(video.url)));
+    const seen = new Set(state.videos.map((video) => normalizeVideoUrl(video.url)));
     const additions = videos.filter((video) => {
       if (seen.has(video.url)) return false;
       seen.add(video.url);
@@ -913,7 +913,7 @@ async function handleEditSubmit(event) {
 
   const nextUrl = parsedEntries[0].url;
   const isUrlChanged = nextUrl !== video.url;
-  const duplicate = state.videos.find((item) => item.id !== video.id && item.url === nextUrl);
+  const duplicate = state.videos.find((item) => item.id !== video.id && normalizeVideoUrl(item.url) === nextUrl);
   if (duplicate) {
     setEditStatus("这个链接已经在画廊里了。");
     return;
@@ -1068,22 +1068,24 @@ async function importLocalToCloud() {
     const videos = parseBackup(JSON.stringify({ format: "workout-videos", version: 1,
       videos: pending.videos.map((video) => ({ title: video.title || "未命名视频", url: video.url,
         category: video.category || "未分类", thumbnail: safeCoverUrl(video.thumbnail) || "" })) }));
-    const seen = new Set(state.videos.map((video) => safeHttpUrl(video.url)));
+    const seen = new Set(state.videos.map((video) => normalizeVideoUrl(video.url)));
     const additions = videos.filter((video) => {
       if (seen.has(video.url)) return false;
       seen.add(video.url);
       return true;
     });
+    let insertedCount = 0;
     if (additions.length) {
       elements.localImportStatus.textContent = `正在导入 ${additions.length} 个视频…`;
       const saved = await persistVideos(additions);
+      insertedCount = saved.length;
       state.videos = mergeVideos(saved, state.videos);
       saveVideos();
       render();
     }
     state.busy = false;
     closeLocalImport();
-    window.alert(additions.length ? `已导入 ${additions.length} 个视频，跳过 ${videos.length - additions.length} 个重复项。本地收藏仍保留。` : "这些视频已在云端，无需重复导入。本地收藏仍保留。");
+    window.alert(insertedCount ? `已导入 ${insertedCount} 个视频，跳过 ${videos.length - insertedCount} 个重复项。本地收藏仍保留。` : "这些视频已在云端，无需重复导入。本地收藏仍保留。");
   } catch (error) {
     elements.localImportStatus.textContent = getFriendlyErrorMessage(error, "导入失败，本地收藏仍保留，请稍后重试。");
   } finally {
@@ -1307,18 +1309,48 @@ function parseVideoEntries(value) {
   });
 }
 
+function normalizeVideoUrl(value) {
+  const safe = safeHttpUrl(value);
+  if (!safe) return "";
+  const url = new URL(safe);
+  const host = url.hostname.toLowerCase();
+  // Only strip platform-specific tracking. Unknown/signed URLs must stay intact.
+  if (host === "bilibili.com" || host.endsWith(".bilibili.com")) {
+    const match = url.pathname.match(/^\/video\/(BV[a-zA-Z0-9]{10})\/?$/);
+    if (match) {
+      url.protocol = "https:";
+      url.hostname = "www.bilibili.com";
+      url.pathname = `/video/${match[1]}/`;
+    }
+    for (const key of [...url.searchParams.keys()]) {
+      if (/^(spm_id_from|vd_source|share_|utm_)/i.test(key) ||
+          ["from", "from_spmid", "from_source", "bbid", "buvid", "timestamp", "is_story_h5", "unique_k", "broadcast_type"].includes(key)) {
+        url.searchParams.delete(key);
+      }
+    }
+    // Page selection and playback offsets remain meaningful.
+    if (url.searchParams.get("p") === "1") url.searchParams.delete("p");
+    url.searchParams.sort();
+  }
+  return url.href;
+}
+
 function parseVideoEntry(text) {
+  text = text.replace(/\\([.:/&])/g, "$1");
   const markdownMatch = text.match(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/);
   const url = markdownMatch?.[2] || text.match(/https?:\/\/[^\s)\]]+/)?.[0];
   if (!url) return null;
 
   const beforeUrl = text.slice(0, text.indexOf(url)).trim();
   const markdownTitle = markdownMatch?.[1] || "";
-  const title = cleanPastedTitle(beforeUrl || markdownTitle);
+  const titleText = markdownMatch ? markdownTitle : beforeUrl;
+  const title = safeHttpUrl(titleText) ? "" : cleanPastedTitle(titleText);
+  const normalizedUrl = normalizeVideoUrl(url.replace(/[，。！？、,.!?]+$/, ""));
+  if (!normalizedUrl) return null;
 
   return {
     title,
-    url: url.replace(/[，。！？、,.!?]+$/, ""),
+    url: normalizedUrl,
   };
 }
 
@@ -1499,14 +1531,14 @@ async function hydrateSavedBilibiliVideos() {
     return (
       parsed.source === "Bilibili" &&
       parsed.bvid &&
-      (isFallbackThumbnail(video.thumbnail) || isBilibiliImageUrl(video.thumbnail) || isLegacyBilibiliEmbed(video.embedUrl))
+      (isFallbackThumbnail(video.thumbnail) || isLegacyBilibiliEmbed(video.embedUrl))
     );
   });
 
   if (!targets.length) return;
 
-  let changed = false;
   for (const video of targets) {
+    let changed = false;
     const parsed = parseVideoUrl(video.url);
     const metadata = await getVideoMetadata(video.url);
     if (generation !== state.syncGeneration || state.busy) return;
@@ -1525,11 +1557,10 @@ async function hydrateSavedBilibiliVideos() {
       video.embedUrl = makeBilibiliEmbedUrl({ bvid: parsed.bvid });
       changed = true;
     }
-  }
-
-  if (changed) {
-    saveVideos();
-    render();
+    if (changed) {
+      saveVideos();
+      render();
+    }
   }
 }
 

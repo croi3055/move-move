@@ -86,7 +86,7 @@ async function createVideos(request, response, libraryKey) {
   const data = await supabaseRequest(`${TABLE}?on_conflict=library_key,url`, {
     method: "POST",
     headers: {
-      Prefer: "resolution=merge-duplicates,return=representation",
+      Prefer: "resolution=ignore-duplicates,return=representation",
     },
     body: JSON.stringify(rows),
   });

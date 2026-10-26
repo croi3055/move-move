@@ -87,6 +87,43 @@ test("API requires owner authentication for reads and writes and rejects shared 
   }
 });
 
+test("cloud insertion skips a record added by another device without overwriting it", async () => {
+  const keys = ["SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY", "APP_WRITE_TOKEN"];
+  const previous = Object.fromEntries(keys.map((key) => [key, process.env[key]]));
+  const oldFetch = globalThis.fetch;
+  const existing = { ...valid, title: "Title edited on another device", category: "Keep tag", library_key: "default" };
+  const rows = new Map([[valid.url, existing]]);
+  let returned;
+  try {
+    process.env.SUPABASE_URL = "https://database.invalid";
+    process.env.SUPABASE_SERVICE_ROLE_KEY = "test-placeholder";
+    process.env.APP_WRITE_TOKEN = "test-placeholder";
+    globalThis.fetch = async (url, options) => {
+      assert.match(url, /on_conflict=library_key,url/);
+      assert.equal(options.headers.Prefer, "resolution=ignore-duplicates,return=representation");
+      const inserted = [];
+      for (const row of JSON.parse(options.body)) {
+        if (rows.has(row.url)) continue;
+        rows.set(row.url, row);
+        inserted.push(row);
+      }
+      return new Response(JSON.stringify(inserted));
+    };
+    const response = { setHeader() {}, status(code) { assert.equal(code, 200); return this; }, json(value) { returned = value; } };
+    await handler({ method: "POST", query: {}, headers: { "x-app-token": "test-placeholder" }, body: { videos: [valid, { ...valid, url: "https://example.com/new" }] } }, response);
+    assert.equal(returned.length, 1);
+    assert.equal(rows.get(valid.url), existing);
+    assert.equal(rows.get(valid.url).title, "Title edited on another device");
+    assert.ok(readFileSync(new URL("../server.mjs", import.meta.url), "utf8").includes("resolution=ignore-duplicates,return=representation"));
+  } finally {
+    globalThis.fetch = oldFetch;
+    for (const key of keys) {
+      if (previous[key] === undefined) delete process.env[key];
+      else process.env[key] = previous[key];
+    }
+  }
+});
+
 test("frontend rejects unsafe saved data before navigation or player creation", () => {
   const source = readFileSync(new URL("../script.js", import.meta.url), "utf8");
   const opened = [], players = [], alerts = [];
