@@ -975,7 +975,7 @@ async function loadRemoteVideos() {
     if (generation !== state.syncGeneration || token !== state.writeToken || state.busy) return;
     state.lastRemoteRefreshAt = Date.now();
     state.storageMode = "remote";
-    state.videos = videos;
+    state.videos = preserveCachedCovers(videos, state.videos);
     saveVideos();
     render();
   } catch {
@@ -983,6 +983,18 @@ async function loadRemoteVideos() {
     state.storageMode = "offline";
   }
   renderSyncState();
+}
+
+function preserveCachedCovers(incoming, cached) {
+  const previous = new Map(cached.map((video) => [video.id, video]));
+  return incoming.map((video) => {
+    const old = previous.get(video.id);
+    if (old?.url === video.url && isFallbackThumbnail(video.thumbnail) &&
+        !isFallbackThumbnail(old.thumbnail)) {
+      return { ...video, thumbnail: old.thumbnail };
+    }
+    return video;
+  });
 }
 
 function openSyncSettings() {
@@ -1537,11 +1549,14 @@ async function hydrateSavedBilibiliVideos() {
 
   if (!targets.length) return;
 
-  for (const video of targets) {
+  for (const target of targets) {
     let changed = false;
-    const parsed = parseVideoUrl(video.url);
-    const metadata = await getVideoMetadata(video.url);
+    const parsed = parseVideoUrl(target.url);
+    const metadata = await getVideoMetadata(target.url);
     if (generation !== state.syncGeneration || state.busy) return;
+    // A background refresh may have replaced the array while metadata loaded.
+    const video = state.videos.find((item) => item.id === target.id && item.url === target.url);
+    if (!video) continue;
     if (metadata.thumbnail && (!isFallbackThumbnail(metadata.thumbnail) || video.thumbnail !== metadata.thumbnail)) {
       video.thumbnail = metadata.thumbnail;
       changed = true;

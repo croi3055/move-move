@@ -20,6 +20,7 @@ function fixture() {
   });
   vm.runInContext(source.slice(source.indexOf("async function loadRemoteVideos("), source.indexOf("function mergeVideos(")), context);
   vm.runInContext(source.slice(source.indexOf("function loadVideos("), source.indexOf("async function hydrateSavedBilibiliVideos(")), context);
+  vm.runInContext(source.slice(source.indexOf("function isFallbackThumbnail("), source.indexOf("function isLegacyBilibiliEmbed(")), context);
   context.offerLocalImport = (videos) => { context.offeredVideos = videos; return videos.length > 0; };
   return { context, storage, calls, state, elements, run: (code) => vm.runInContext(code, context) };
 }
